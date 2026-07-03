@@ -80,6 +80,40 @@ Sprite.circle(5, char='*', fg=(0, 255, 0))        # Circle
 Sprite.from_file('art.txt')                        # From file
 ```
 
+### Sprite Methods
+
+```python
+# Movement
+s.move_to(x, y, duration=None, easing=None)     # Move to position
+s.move_by(dx, dy, duration=None, easing=None)    # Move by offset
+
+# Opacity
+s.fade_to(opacity, duration=None, easing=None)    # Fade to specific value
+s.fade_in(duration=1.0)                           # Fade from transparent
+s.fade_out(duration=1.0)                          # Fade to transparent
+
+# Scale
+s.scale_to(scale, duration=None, easing=None)     # Scale uniformly
+
+# Effects
+s.spin(speed=1.0)              # Rotate forever
+s.pulse(min=0.8, max=1.2, period=1.0)   # Scale pulse
+s.wobble(amount=3, period=2.0)   # Side-to-side
+
+# Flow control
+s.wait(seconds)                # Pause in animation chain
+s.then(callback)               # Callback when animation ends
+s.clear_anims()                # Remove all animations
+
+# Programmatic editing
+s.set_pixel(dx, dy, char='#', fg=None, bg=None)  # Set cell
+s.draw_text(dx, dy, text, fg=None)                # Draw text on sprite
+
+# Utilities
+s.copy() -> Sprite             # Deep copy
+s.contains(px, py) -> bool     # Hit test
+```
+
 ### Animations
 
 Fluent chaining — no tweens or math required.
@@ -96,12 +130,27 @@ s.move_to(30, 5).over(1).then(lambda: print('done'))
 # Loop forever
 s.move_to(30, 18).over(1).ease('bounce_out').loop()
 
-# Built-in effects
+# Built-in effects (return Anim objects for chaining)
 s.spin(speed=0.5)                # Rotate forever
 s.pulse(min=0.8, max=1.2, period=1.0)   # Scale pulse
 s.wobble(amount=3, period=2.0)   # Side-to-side
 s.fade_in(2.0)                   # Fade from transparent
 s.scale_to(2.0).over(1)          # Scale up
+```
+
+### Anim Fluent API
+
+The `Anim` object supports chaining for complex animations:
+
+```python
+anim = Anim(sprite)
+anim.to(30, 18).over(2).ease('bounce_out').loop().then(callback)
+anim.fade(0.5).over(1)
+anim.scale(2).over(1.5).ease('elastic_out')
+anim.delay(0.5).then(lambda: print('started'))
+
+# Properties
+anim.done  # bool — animation finished
 ```
 
 ### Running the demo
@@ -115,21 +164,20 @@ python3 easy_demo.py             # q to quit, n to change spinner
 ## Running the Demo
 
 ```bash
-python3 demo.py                  # Original 98-scene demo
+python3 demo.py                  # Original 127+ scene demo
 ```
 
 ### Controls (interactive terminal mode)
 
 | Key | Action |
 |-----|--------|
-| `1`-`9` | Jump to scene 1-9 |
-| `0` | Jump to scene 10 |
 | `n` / `→` | Next scene |
 | `p` / `←` | Previous scene |
 | `Space` | Toggle pause |
 | `q` | Quit |
 | `↑` | Send "up" to scene |
 | `↓` | Send "down" to scene |
+| Any other key | Passed to active scene via `KEY_PRESSED` |
 
 ### Non-TTY mode
 When stdout is piped or redirected, the demo auto-advances every 5 seconds:

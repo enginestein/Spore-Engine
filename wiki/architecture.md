@@ -294,7 +294,7 @@ while running:
         transition_obj.apply(prev_c, c, trans_t)
     draw HUD (scene name, controls)
     render_to(stdout)
-    handle keyboard input (q/n/p/space/arrows/1-0)
+    handle keyboard input (q/n/p/space/arrows)
     scene changes: trigger transition
 ```
 

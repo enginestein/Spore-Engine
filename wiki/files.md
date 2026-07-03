@@ -385,13 +385,13 @@ A beginner-friendly high-level layer that wraps the engine's primitives into dea
 Exports `App`, `Sprite`, `Anim`, `Button`, `Label`, `Dialog`, `map_range`, `clamp`, `smoothstep`, `lerp_color`, `random_color`.
 
 ### `app.py`
-**`App`** — Self-contained application with auto main loop, Canvas management, sprite registration, keyboard input, and background fills. Call `App().run()` and you're done.
+**`App`** — Self-contained application with auto main loop, Canvas management, sprite registration, keyboard input, and background fills. Call `App().run()` and you're done. Supports `bg()`, `bg_gradient()`, `bg_art()` for backgrounds, and `on_tick`/`on_key`/`on_any_key`/`on_click`/`on_init` event handlers.
 
 ### `sprite.py`
-**`Sprite`** — Sprites defined by multi-line ASCII art strings. Properties: `x`, `y`, `fg`, `bg`, `opacity`, `scale`, `rotation`, `visible`. Methods: `move_to()`, `spin()`, `pulse()`, `wobble()`, `fade_in()`, `scale_to()`. Factory methods: `Sprite.rect()`, `Sprite.circle()`, `Sprite.from_file()`.
+**`Sprite`** — Sprites defined by multi-line ASCII art strings. Properties: `x`, `y`, `z`, `fg`, `bg`, `opacity`, `scale_x`, `scale_y`, `rotation`, `visible`, `bounds`. Methods: `set_art()`, `set_pixel()`, `draw_text()`, `move_to()`, `move_by()`, `spin()`, `pulse()`, `wobble()`, `fade_to()`, `fade_in()`, `fade_out()`, `scale_to()`, `wait()`, `then()`, `clear_anims()`, `contains()`, `copy()`. Factory methods: `Sprite.rect()`, `Sprite.circle()`, `Sprite.from_file()`.
 
 ### `anim.py`
-**`Anim`** — Internal animation object. Fluent API via `.over(duration)`, `.ease(name)`, `.loop()`, `.then(callback)`. Supports tween-based movement, spin, pulse, wobble, and delay.
+**`Anim`** — Internal animation object. Fluent API via `.to(x, y)`, `.fade(opacity)`, `.scale(s)`, `.over(duration)`, `.ease(name)`, `.loop()`, `.yoyo()`, `.delay(sec)`, `.then(callback)`, `.forever()`. Supports tween-based movement, spin, pulse, wobble, and delay.
 
 ### `widgets.py`
 Lightweight GUI widgets: **`Button`** (clickable with border), **`Label`** (static text), **`Dialog`** (modal overlay with title, message, and buttons).
@@ -448,7 +448,7 @@ Helper functions: `map_range()`, `clamp()`, `smoothstep()`, `lerp_color()`, `ran
 
 ### `demo.py`
 Main interactive demo launcher:
-- 98 scenes with keyboard controls (n/p/space/q/arrows/1-0)
+- 127+ scenes with keyboard controls (n/p/space/q/arrows)
 - Transition effects between scenes (fade, wipe, slide, checkerboard, dissolve)
 - Auto-play mode when not in TTY
 - Particle system overlay
@@ -457,25 +457,16 @@ Main interactive demo launcher:
 ### `easy_demo.py`
 Simple API demo: creates sprites from ASCII art, chains animations (move_to, spin, pulse, scale_to) with easing functions, uses keyboard input binding, text placement, and programmatic sprite drawing via `App().run()`.
 
-### `tui_app.py`
-Standalone terminal UI application built on the widget toolkit:
-- Dashboard with live system monitors (CPU, RAM, DISK usage bars)
-- Screen navigation (dashboard, scene browser, etc.)
-- Uses `TerminalApp` event loop, `WidgetManager` focus routing
-- Full keyboard and mouse interaction
-- Line-buffered ANSI rendering for smooth output
-
-
 ### Scene Files (`demos/scene_*.py`)
-66 files containing 98 scene functions. Each scene receives `(canvas, hires_canvas, time, particle_system, dt)` and renders into the canvas. Organized by category:
+90 files containing 127+ scene functions. Each scene receives `(canvas, hires_canvas, time, particle_system, dt)` and renders into the canvas. Organized by category:
 
-- **3D:** scene_3d.py, scene_raycaster, scene_raytracer
-- **Effects:** scene_fx.py, scene_particles, scene_shaders, scene_postfx
-- **Simulation:** scene_sim.py, scene_cellular, scene_powder, scene_physics_rigid
-- **Procedural:** scene_fractals, scene_terrain, scene_dungeon, scene_erosion
-- **Animation:** scene_anim.py, scene_timeline, scene_anim_path
-- **UI/Toolkit:** scene_ui.py, scene_tui, scene_terminal_app
-- **Advanced:** scene_wfc, scene_sdf, scene_marching_cubes, scene_softbody, scene_ik
-- **Visual:** scene_landscape, scene_aurora, scene_aurora_storm, scene_black_hole, etc.
+- **3D:** scene_3d.py, scene_raycaster, scene_raytracer, scene_voxel_world, scene_sdf_*.py
+- **Effects:** scene_fx.py, scene_particles, scene_shaders, scene_postfx, scene_shader_symphony
+- **Simulation:** scene_sim.py, scene_cellular, scene_powder, scene_physics_rigid, scene_physics_enhanced
+- **Procedural:** scene_fractals, scene_terrain, scene_dungeon, scene_erosion, scene_biome_demo
+- **Animation:** scene_anim.py, scene_timeline, scene_anim_path, scene_ragdoll
+- **UI/Toolkit:** scene_ui.py, scene_tui, scene_terminal_app, scene_tilemap
+- **Advanced:** scene_wfc, scene_sdf, scene_marching_cubes, scene_softbody, scene_ik, scene_steering, scene_delaunay, scene_volumetric
+- **Visual:** scene_landscape, scene_aurora, scene_aurora_storm, scene_black_hole, scene_god_rays, scene_neon_cathedral, scene_cosmic_tunnel, scene_ethereal_ruins, scene_stained_glass, scene_golden_city, scene_astral_cathedral, scene_phoenix, scene_celestial_temple, scene_starry_night, scene_prism_raytracer, etc.
 - **Simple:** easy_demo
-- **Media:** scene_media_player, scene_video_player, scene_glyph_art
+- **Media:** scene_media_player, scene_video_player, scene_glyph_art, scene_photo_ascii, scene_raytracer_photo

@@ -158,7 +158,7 @@ flowchart TD
   %% ─── PROCEDURAL GENERATION ──────────────────────────────────────
   subgraph GEN["🏔️ gen/ — Procedural Generation"]
     GEN_TERR["Terrain{heightmap,Perlin fbm}"] -->|"render"| CORE_CANVAS
-    GEN_MAZE["Maze{DFS,Prims,Kruskals}"] -->|"render"| CORE_CANVAS
+    GEN_MAZE["Maze{DFS,Prim's}"] -->|"render"| CORE_CANVAS
     GEN_LSYS["LSystem{axiom,rules}"] -->|"render"| CORE_CANVAS
     GEN_DUNGEON["DungeonGen{BSP rooms+corridors}"] -->|"render"| CORE_CANVAS
     GEN_WFC["WFC{WaveFunctionCollapse}"] -->|"render"| CORE_CANVAS

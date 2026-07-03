@@ -1,13 +1,13 @@
 # Spore Engine
 
-A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3D rendering, physics, fluid simulation, procedural generation, cellular automata, ray tracing, and 99 demo scenes — all in pure Python with no external dependencies. Also includes image/video/GIF to ASCII conversion via ffmpeg or PIL, plus a **glyph art** module that converts media to copyable plain-text ASCII.
+A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3D rendering, physics, fluid simulation, procedural generation, cellular automata, ray tracing, and 127+ demo scenes — all in pure Python with no external dependencies. Also includes image/video/GIF to ASCII conversion via ffmpeg or PIL, plus a **glyph art** module that converts media to copyable plain-text ASCII.
 
 ## Feature Highlights
 
 | Subsystem | Key Components |
 |---|---|
 | **Simple API** | `App`, `Sprite`, `Anim` — sprites from ASCII art, tweened animations, keyboard/mouse input, fluent chaining |
-| **Core Rendering** | `Canvas`, `HiResCanvas` (2x braille), `Color` (HSV, hex, blending, gradients), `Sprite`, `Vec2`/`Vec3`/`Mat4` |
+| **Core Rendering** | `Canvas`, `HiResCanvas` (2x vertical via half-blocks), `Color` (HSV, hex, blending, gradients), `Sprite`, `Vec2`/`Vec3`/`Mat4` |
 | **3D Rendering** | `Mesh3D` with wireframe & solid shading, OBJ/PLY loader, backface culling, depth sort, light direction |
 | **Isometric** | `IsoTile`, `IsoMap`, `IsoCamera` — tile grid with screen projection |
 | **Voxel** | `VoxelScene` — heightmap-based 3D landscape with directional shading & fog |
@@ -29,7 +29,7 @@ A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3
 | **Scene Transitions** | `Fade`, `Wipe` (4 dirs), `Slide`, `Checkerboard`, `PixelDissolve` |
 | **Volumetric FX** | `VolumetricFog`, `LightCone`, `SmokePlume`, `VolumetricRenderer` |
 | **Animation** | `Tween`, `Sequence`, `Oscillator`, `Ticker`, 20+ easing functions, `Animator`, `Entity`, `Path`/`PathFollower`, `Keyframe`/`Track`/`Timeline`, IK `Bone`/`Skeleton` (FABRIK solver, arm/leg/tentacle creators) |
-| **Procedural Gen** | `Terrain` (Perlin heightmap + island), `Maze` (DFS/Kruskal), `LSystem` (stochastic too), `DungeonGen` (BSP rooms+corridors), `ErosionSim`, `WFC` (wave function collapse), fractals (`Mandelbrot`, `BurningShip`, `NewtonFractal`, `BarnsleyFern`) |
+| **Procedural Gen** | `Terrain` (Perlin heightmap + island), `Maze` (DFS/Prim's), `LSystem` (stochastic too), `DungeonGen` (BSP rooms+corridors), `ErosionSim`, `WFC` (wave function collapse), fractals (`Mandelbrot`, `BurningShip`, `NewtonFractal`, `BarnsleyFern`) |
 | **Noise** | `PerlinNoise` (2D/3D, fbm), `WorleyNoise`, `OpenSimplexNoise`, `ValueNoise` |
 | **Cellular Automata** | `GameOfLife`, `Automata1D`, `WireWorld`, `LangtonsAnt`, `ReactionDiffusion` (Gray-Scott), 12+ built-in GoL patterns |
 | **Powder Simulation** | `PowderSim` — 12 materials (Sand/Water/Stone/Wood/Fire/Smoke/Oil/Lava/Acid/Plant/Salt/Steam), liquid/gas/solid physics, flammability, melting, erosion |
@@ -43,13 +43,13 @@ A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3
 | **TileMap** | `TileMap`, `Camera`, auto-tiling, collision, `generate_platformer`, `generate_cave` |
 | **Bitmap Font** | `Font` — 5x7 character glyphs |
 | **Media I/O** | Image/video/GIF → ASCII (`ImageConverter`, `image_to_canvas`, `video_to_ascii`), `ScreenRecorder`, `glyphart` (copyable plain-text ASCII), ANSI file I/O (parse/export/save/load), `Video`/`FramePlayer`, canvas scaling & gradient |
-| **Demo Scenes** | 98+ interactive demo scenes in `demo.py` / `demos/` |
+| **Demo Scenes** | 127+ interactive demo scenes in `demo.py` / `demos/` |
 
 ## Quick Start
 
 ```bash
 python3 easy_demo.py             # Simple API demo (sprites, animation, input)
-python3 demo.py                  # Interactive demo (98+ scenes)
+python3 demo.py                  # Interactive demo (127+ scenes)
 ```
 
 ```python
@@ -121,7 +121,3 @@ text, colors = image_to_glyph_colored('photo.jpg', width=80)
 - A terminal with ANSI truecolor support
 - No external Python dependencies
 - Optional: `ffmpeg` and `Pillow` for image/video/GIF conversion
-
-## License
-
-MIT

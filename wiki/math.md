@@ -439,7 +439,7 @@ Links are resolved via position-based correction ($\alpha = \min(\text{stiffness
 
 ---
 
-## 12. 3D Physics — `spore_engine/sim/physics.py`
+## 12. 3D Physics — `spore_engine/sim/physics3d.py`
 
 ### Rigid Body Rotation
 $$
@@ -472,7 +472,7 @@ $$
 
 ---
 
-## 13. Steering Behaviors — `demos/scene_flocking.py`
+## 13. Steering Behaviors — `spore_engine/sim/steering.py`
 
 ### Seek
 $$
@@ -716,6 +716,7 @@ $$
 For $f(z) = z^3 - 1$, iterate Newton's method from each pixel. Color by which root (of the three cube roots of unity) the iteration converges to. Shade by iteration count.
 
 ### Barnsley Fern IFS — `spore_engine/gen/fractals.py`
+
 Four affine transforms with probabilities:
 $$
 \begin{aligned}
@@ -726,3 +727,114 @@ f_4(x,y) &= (-0.15x + 0.28y,\; 0.26x + 0.24y + 0.44) && p = 0.06 \quad (\text{ri
 \end{aligned}
 $$
 Start at $(0,0)$, randomly apply a transform weighted by probability. Each point maps to a pixel on the canvas, accumulating to form a fern shape.
+
+---
+
+## 24. Vector Fields — `spore_engine/fx/field.py`
+
+### Field Source Types
+
+**Radial (source/sink):**
+$$
+F(x,y) = \text{strength} \cdot \frac{(x - x_0,\; y - y_0)}{\|(x - x_0,\; y - y_0)\|}
+$$
+
+**Vortex:**
+$$
+F(x,y) = \text{strength} \cdot \frac{(y_0 - y,\; x - x_0)}{\|(x - x_0,\; y - y_0)\|}
+$$
+
+**Swirl:** Combines radial attraction with tangential rotation.
+
+### Particle Advection
+$$
+p_{t+1} = p_t + F(p_t) \cdot dt
+$$
+
+Particles trace streamlines through the vector field. Trails are rendered by leaving fading marks at each position.
+
+---
+
+## 25. 2D Lighting — `spore_engine/fx/lighting.py`
+
+### Ray-Scene Intersection
+
+For a ray $R(t) = O + t \cdot D$, find the smallest positive $t$ intersecting any line segment $S(u) = A + u \cdot (B - A)$:
+
+$$
+t = \frac{(A - O) \times (B - A)}{D \times (B - A)},\quad
+u = \frac{(A - O) \times D}{D \times (B - A)}
+$$
+
+Intersection valid when $t > 0$ and $0 \le u \le 1$.
+
+### Visibility Polygon (FOV)
+
+Sort all obstacle endpoints by angle from the light source. Cast rays at each angle $\pm \epsilon$ to determine visible segments. The polygon connecting visible ray hits forms the visibility region.
+
+### DDA Grid Shadows
+
+For tile maps, DDA traversal accumulates opacity along each ray. If cumulative opacity exceeds a threshold, cells beyond are shadowed:
+
+$$
+\text{brightness} = \max(0,\; 1 - \Sigma\;\text{tile\_opacity})
+$$
+
+Light intensity falls off with distance:
+$$
+\text{intensity} = \max(0,\; \text{power} \cdot (1 - \frac{d}{\text{radius}}))
+$$
+
+---
+
+## 26. Particle System Dynamics — `spore_engine/fx/effects.py`
+
+### Particle Update
+$$
+\begin{aligned}
+v &\mathrel{+}= g \cdot dt \quad (\text{gravity}) \\
+v &\mathrel{+}= \text{random\_jitter} \quad (\text{turbulence}) \\
+p &\mathrel{+}= v \cdot dt \\
+\text{life} &\mathrel{-}= dt
+\end{aligned}
+$$
+
+### Burst Emission
+A burst spawns $n$ particles at position $(x,y)$ with:
+- Velocity: random direction $\times$ speed
+- Lifetime: uniform random in $[\text{min\_life}, \text{max\_life}]$
+- Color: random from palette, interpolated over lifetime
+
+Trail particles are spawned each frame with reduced lifetime and opacity.
+
+---
+
+## 27. Scene Transitions — `spore_engine/fx/transitions.py`
+
+### Fade
+$$
+\text{out}(x,y) = \text{lerp}(\text{src}(x,y),\; \text{dst}(x,y),\; t),\quad t \in [0,1]
+$$
+
+### Wipe
+A sweeping edge moves across the screen:
+$$
+\text{edge} = t \cdot w \quad (\text{right wipe})
+$$
+Pixels on the wiped side use the destination frame; pixels on the other side use the source frame.
+
+### Checkerboard
+$$
+\text{choice} = \begin{cases}
+\text{dst} & \text{if } (\lfloor x/s \rfloor + \lfloor y/s \rfloor) \bmod 2 < t \cdot 2 \\
+\text{src} & \text{otherwise}
+\end{cases}
+$$
+Where $s = \text{tile size}$. As $t$ increases, more checker cells flip from source to destination.
+
+### PixelDissolve
+Each pixel flips from source to destination when its random threshold is exceeded:
+$$
+\text{if } \text{rand}(x,y) < t:\; \text{dst},\; \text{else } \text{src}
+$$
+The random map is pre-computed per transition instance.
