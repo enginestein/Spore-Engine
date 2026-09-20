@@ -17,13 +17,13 @@ easy_demo.py / demo.py    ←  Entry points
     ├── gen/                  ←  Procedural generation
     ├── ui/                   ←  Terminal UI toolkit
     ├── anim/                 ←  Animation system
-    ├── easy/                 ←  Simple high-level API (App, Sprite, Anim)
+    ├── easy/                 ←  Simple high-level API (App, GameSprite, Anim)
     └── media/                ←  Image/video I/O + glyph art
          │
     stdout                    ←  ANSI escape codes → terminal
 ```
 
-*Note: The `easy/` layer (App, Sprite, Anim) wraps lower-level Canvas/Color primitives and scene loop logic into a simple object-oriented API. See "Easy API Architecture" below.*
+*Note: The `easy/` layer (App, GameSprite, Anim) wraps lower-level Canvas/Color primitives and scene loop logic into a simple object-oriented API. See "Easy API Architecture" below.*
 
 ---
 
@@ -55,15 +55,28 @@ Effects from `postfx.py` and `shaders.py` can transform the canvas after the sce
 
 For HiResCanvas: `to_canvas()` first flattens the double-resolution buffer to a Canvas using Unicode half-block characters (▀ ▄ █), then renders normally.
 
-### 5. Easy API (App/Sprite)
+### 5. Easy API (App/GameSprite)
 
 The `App` class provides a higher-level rendering pipeline for sprite-based applications:
 
 ```
 App.run()
-  → _update(dt): sprite.update(dt), tick handlers
-  → _render(): canvas.clear() → _fill_bg() → sort sprites by z → s.render(canvas) → canvas.render_to(stdout)
+  → tty raw mode + engine Input (KeyEvent/MouseEvent/ResizeEvent stream)
+  → _handle_input(): events() batch → KeyState + on_any_key / on_key / wheel / resize handlers
+  → _update(dt): camera.clamp(), sprite.update(dt), tick handlers
+  → _render():
+      _render_frame():
+        canvas.clear() + hr.clear()
+        _fill_bg()                         (bg / bg_gradient / bg_art)
+        sort sprites by z → _draw_sprite() (camera transform; hires double-res)
+        hr.to_canvas(canvas)               (skips empty hi-res cells)
+        title bar, active transitions (transition.apply)
+        screen_fx.apply(canvas)            (shake/flash/fade)
+      canvas.render_to(sys.stdout)
 ```
+
+`_render_frame()` is separable from output: scene-harness wrappers reuse it to
+render the same App pipeline into externally provided `(canvas, hr)` buffers.
 
 ---
 
@@ -309,16 +322,36 @@ The `easy/` subpackage provides a high-level wrapper around the core rendering a
 
 ```
 App
-  ├── owns Canvas, HiResCanvas  ← delegates rendering to core/Canvas
-  ├── owns Sprite list           ← each Sprite wraps a pixel array (_cells)
-  ├── owns Anim list per Sprite  ← Anim wraps Tween from core/anim
-  ├── event handlers (tick, key, click, init)
+  ├── owns Canvas, HiResCanvas    ← delegates rendering to core/Canvas
+  ├── owns core.input.Input       ← events() batch, KeyState, raw-mode keys,
+  │                                  on_key/on_any_key/on_click/on_wheel/on_resize
+  ├── owns core.camera.Camera     ← optional world→screen transform
+  ├── owns screen_fx (ScreenFX)   ← shake / flash / fade applied per frame
+  ├── owns GameSprite list        ← each GameSprite wraps a pixel array (_cells),
+  │                                  sprites may be hires (hr) or low-res
+  ├── owns Anim list per GameSprite ← Anim wraps Tween from core/anim
+  ├── event handlers (tick, key, click, resize, init)
   └── main loop (timing, input, update, render)
 ```
 
-- **App** manages the frame loop, input handling, background rendering, and sprite lifecycle.
-- **Sprite** wraps a 2D pixel array (list of `(char, dx, dy, fg, bg)` tuples) with position, scale, rotation, opacity, and animation support.
-- **Anim** (from `easy/anim.py`) wraps `Tween` to animate Sprite properties (position, opacity, scale, rotation) with easing functions over time.
+- **App** manages the frame loop, input handling, background rendering, camera,
+  screen effects, transitions, and sprite lifecycle.
+- **GameSprite** wraps a 2D pixel array (list of `(char, dx, dy, fg, bg)` tuples)
+  with position, scale, rotation, opacity, and animation support.
+- **Anim** (from `easy/anim.py`) wraps `Tween` to animate GameSprite properties
+  (position, opacity, scale, rotation) with easing functions over time.
+
+### Scene Authoring Stack (core)
+
+Two idioms share the same Canvas core:
+
+- **Scene functions** (`demos/scene_*.py`, the `demo.py` harness):
+  `def scene(c, hr, t, pt, dt)` draws and returns None; per-scene memory is kept
+  in module-level state or `scene_state(name)`.
+- **App instances** (`easy.App`): object-oriented sprites/camera/input/effects.
+
+Both render through `Canvas.render_to()`; the `Scene` class (`core/scene.py`)
+composes a Canvas + HiResCanvas + named `Layer`s into one object.
 
 ---
 
@@ -339,12 +372,15 @@ For downlevel terminals: `.to_ansi_256()` approximates to xterm 256-color palett
 ## Key Design Decisions
 
 1. **No external dependencies** — Everything is pure Python. Optional ffmpeg/PIL for media I/O.
-2. **Z-buffer** — Each cell stores depth for painter's algorithm occlusion.
-3. **HiResCanvas** — Doubles vertical resolution via Unicode half-blocks, no terminal cell size change.
-4. **Semi-Lagrangian advection** — Unconditionally stable fluid simulation without CFL constraints.
-5. **Substepping** — Physics world divides dt into smaller steps for stable constraint solving.
-6. **Double-buffering** — Canvas updates are fully rendered to buffer, then flushed to terminal atomically.
-7. **Raw terminal mode** — `demo.py` uses `tty.setraw()` for real-time keyboard input without Enter key.
+2. **Z-buffer** — Each cell stores depth; `render_mesh_solid` interpolates depth per pixel so occlusion survives intersecting meshes.
+3. **Deep-empty z baseline** — New/cleared `Canvas` and `HiResCanvas` cells have `z = -inf`, so negative-z background fills paint after `clear()` and any `z >= 0` foreground occludes them.
+4. **Shared DrawMixin** — Every draw primitive lives once in `core/draw.py` and is inherited by both `Canvas` and `HiResCanvas`, so the two surfaces never drift apart.
+5. **Non-destructive hi-res flatten** — `HiResCanvas.to_canvas()` skips empty cells by default, so it never erases a pre-drawn background; pass `blank=True` to also clear empties.
+6. **HiResCanvas** — Doubles vertical resolution via Unicode half-blocks, no terminal cell size change.
+7. **Semi-Lagrangian advection** — Unconditionally stable fluid simulation without CFL constraints.
+8. **Substepping** — Physics world divides dt into smaller steps for stable constraint solving.
+9. **Double-buffering** — Canvas updates are fully rendered to buffer, then flushed to terminal atomically.
+10. **Raw terminal mode** — `demo.py` and `easy.App.run()` use raw mode for real-time keyboard input without the Enter key; `core/input.py` decodes escape sequences (arrows, F-keys, Home/End, PgUp/PgDn, etc.).
 
 
 ---
@@ -352,15 +388,21 @@ For downlevel terminals: `.to_ansi_256()` approximates to xterm 256-color palett
 ## Module Dependencies
 
 ```
-core/        ← No internal dependencies (foundation layer)
+core/        ← No internal dependencies (foundation layer); canvas.py, draw.py,
+               color.py, geom.py, + state/scene/camera/input/util for authoring
 sim/         → core/ (uses Vec2/Vec3, Color, Canvas)
 gen/         → core/ + sim/ (uses noise, physics)
 render3d/    → core/ (uses Mat4, Vec3, Canvas)
-fx/          → core/ (uses Color, Canvas, Vec2)
-anim/        → core/ (uses Color, easing math)
+fx/          → core/ (uses Color, Canvas, Vec2, core.util.clamp)
+anim/        → core/ (uses Color, core.util lerp/lerp_color, easing math)
 ui/          → core/ (uses Canvas, Color)
-easy/        → core/ + anim/ (uses Canvas, Color, Tween)
+easy/        → core/ (App uses core.input + core.camera + ScreenFX) + anim/
 media/       → core/ (uses Canvas, Color)
 ```
 
-None of the subpackages depend on each other (except `sim/` → `core/` and `easy/` → `anim/`), keeping the architecture modular.
+`fx/screenfx.py` imports `clamp` from `core/util.py`, and `easy/app.py`
+imports core `Input`/`Camera` — the core layer stays dependency-free while the
+new scene-authoring modules (`state`, `scene`, `camera`, `input`, `util`) reuse
+only `canvas.py`/`color.py`. None of the subpackages depend on each other
+(except `sim/` → `core/` and `easy/` → `anim/`), keeping the architecture
+modular.

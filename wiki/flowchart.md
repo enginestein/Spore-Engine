@@ -18,9 +18,12 @@ flowchart TD
 
   %% ─── EASY LAYER ────────────────────────────────────────────────
   subgraph EASY["🎯 easy/ — High-Level API"]
-    EASY_APP["App"] -->|"manages"| EASY_SPRITE["Sprite"]
+    EASY_APP["App"] -->|"manages"| EASY_SPRITE["GameSprite"]
     EASY_APP -->|"creates"| EASY_ANIM["Anim"]
-    EASY_APP -->|"creates"| EASY_WIDGETS["Button / Label / Dialog"]
+    EASY_APP -->|"creates"| EASY_WIDGETS["SimpleButton / SimpleLabel / SimpleDialog"]
+    EASY_APP -->|"input (raw keys)"| CORE_INPUT
+    EASY_APP -->|"world camera"| CORE_CAM
+    EASY_APP -->|"shake/flash/fade"| SFX_CLASS
     EASY_ANIM -->|"wraps"| ANIM_TWEEN
     EASY_SPRITE -->|"move_to / spin / pulse / fade"| EASY_ANIM
     EASY_SPRITE -->|"renders onto"| CORE_CANVAS
@@ -43,6 +46,7 @@ flowchart TD
     subgraph DRAW["Drawing Primitives"]
       DRAWSET["set_pixel"] --> CORE_CELL
       DRAWTEXT["draw_text"] --> DRAWSET
+      DRAWTEXTAT["draw_text_at / draw_text_centered (9 anchors)"] --> DRAWSET
       DRAWLINE["draw_line"] --> DRAWSET
       DRAWCIRC["draw_circle"] --> DRAWSET
       DRAWRECT["draw_rect"] --> DRAWSET
@@ -51,13 +55,26 @@ flowchart TD
       DRAWPOLY["draw_polygon"] --> DRAWSET
       DRAWBEZ["draw_bezier"] --> DRAWSET
       DRAWFILL["fill / fill_rect"] --> DRAWSET
-      DRAWGRAD["gradient_fill"] --> DRAWSET
+      DRAWGRAD["gradient_fill[_radial]"] --> DRAWSET
+      DRAWGRADX["fill_gradient_x/y, fill_sky"] --> DRAWSET
       DRAWARC["draw_arc"] --> DRAWSET
+      DRAWBLIT["blit_canvas"] --> DRAWSET
     end
   end
 
+  %% ─── SCENE AUTHORING ─────────────────────────────────────────
+  subgraph AUTH["🎮 core — Scene Authoring Stack"]
+    AUTH_STATE["SceneState / scene_state()"] -.->|"per-scene memory"| E3
+    AUTH_SCENE["Scene / Layer"] -->|"compose + present"| CORE_CANVAS
+    AUTH_SCENE -->|"hires over bg"| CORE_HIRES
+    CORE_INPUT["Input (KeyEvent / MouseEvent / ResizeEvent, synthesized releases) / KeyState"] -.->|"keys"| E3
+    CORE_CAM["Camera (world→screen)"] -->|"to_screen / draw"| CORE_CANVAS
+    CORE_UTIL["clamp/lerp/ramp/wave/osc/bounce/..."] -.-> CORE_CAM
+    CORE_UTIL -.-> SFX_CLASS
+  end
+
   %% ─── MATH/GEOMETRY ──────────────────────────────────────────────
-  subgraph MATH["📐 math/ — Geometry Foundation"]
+  subgraph MATH["📐 core/geom — Geometry Foundation"]
     VEC2["Vec2"] --> CORE_CELL
     VEC3["Vec3"] --> R3D_MESH
     MAT4["Mat4"] --> R3D_MESH
@@ -88,7 +105,7 @@ flowchart TD
     R3D_MESH["Mesh3D{verts,faces,edges}"] -->|"transform(mat4)"| R3D_MESH
     R3D_MESH -->|"render_wireframe/render_solid"| CORE_CANVAS
     R3D_LOAD["load_obj / load_ply"] --> R3D_MESH
-    R3D_RAYTR["Raytracer{Scene,Sphere,Plane}"] -->|"render"| CORE_HIRES
+    R3D_RAYTR["Raytracer{RayScene,Sphere,Plane,Box,Cylinder,TexturedQuad}"] -->|"render"| CORE_HIRES
     R3D_SDF["SDFScene{sd_sphere,sd_box,sd_torus,op_union,...}"] -->|"ray march →"| CORE_CANVAS
     R3D_VOXEL["VoxelScene"] -->|"heightmap → 3D"| CORE_CANVAS
     R3D_ISO["IsoMap + IsoTile + IsoCamera"] -->|"isometric →"| CORE_CANVAS
@@ -210,7 +227,6 @@ flowchart TD
     PFX_CHROMA["chromatic_aberration"] --> CORE_CANVAS
     PFX_PIX["pixelate"] --> CORE_CANVAS
     PFX_PAL["palette_remap"] --> CORE_CANVAS
-    PFX_KUW["KuwaharaFilter"] -->|"shader pipeline"| SHADER_PIPE
   end
 
   %% ─── SHADERS ────────────────────────────────────────────────────
@@ -218,6 +234,7 @@ flowchart TD
     SHADER_BASE["Shader"] --> SHADER_PIPE["ShaderPipeline{add,remove,apply}"]
     SHADER_WAVE["WaveDistort"] --> SHADER_BASE
     SHADER_SWIRL["SwirlDistort"] --> SHADER_BASE
+    SHADER_KUW["KuwaharaFilter"] --> SHADER_BASE
     SHADER_POSTER["Posterize"] --> SHADER_BASE
     SHADER_SOLAR["Solarize"] --> SHADER_BASE
     SHADER_CEL["CelShade"] --> SHADER_BASE
@@ -236,18 +253,26 @@ flowchart TD
 
   %% ─── SCREEN/TEXT EFFECTS ────────────────────────────────────────
   subgraph SCREENFX["🖥️ fx/ — Screen & Text Effects"]
+    SFX_CLASS["ScreenFX{add_shake,add_flash,add_fade}"] -->|"tick(dt) → apply(canvas)"| CORE_CANVAS
     SFX_SHAKE["shake"] --> CORE_CANVAS
     SFX_FLASH["flash"] --> CORE_CANVAS
     SFX_FADE["fade_overlay"] --> CORE_CANVAS
     SFX_CROSS["crossfade"] --> CORE_CANVAS
     SFX_COLOR["color_overlay"] --> CORE_CANVAS
+    SFX_VIGN["vignette"] --> CORE_CANVAS
+    SFX_SCAN["scanlines"] --> CORE_CANVAS
     TFX_GLITCH["glitch_text"] --> CORE_CANVAS
     TFX_TYPE["typewriter_text"] --> CORE_CANVAS
     TFX_SINE["sine_text"] --> CORE_CANVAS
     TFX_RAINBOW["rainbow_text"] --> CORE_CANVAS
+    TFX_GRAD["gradient_text"] --> CORE_CANVAS
     TFX_SCROLL["scroll_text"] --> CORE_CANVAS
     TFX_CRAWL["star_wars_crawl"] --> CORE_CANVAS
+    TFX_WAVE["wave_text"] --> CORE_CANVAS
+    TFX_FIRE["fire_text"] --> CORE_CANVAS
+    TFX_MATRIX["matrix_code_rain"] --> CORE_CANVAS
     TFX_BOUNCE["bounce_text"] --> CORE_CANVAS
+    TFX_ZOOM["zoom_text"] --> CORE_CANVAS
   end
 
   %% ─── TRANSITIONS ────────────────────────────────────────────────
@@ -273,7 +298,7 @@ flowchart TD
     UI_WM --> UI_BTN["Button"]
     UI_WM --> UI_LBL["Label"]
     UI_WM --> UI_SLIDER["Slider"]
-    UI_WM --> UI_INPUT["Input"]
+    UI_WM --> UI_INPUT["TextField"]
     UI_WM --> UI_TEXTBOX["TextBox"]
     UI_WM --> UI_PROG["ProgressBar"]
     UI_WM --> UI_MENU["Menu"]
@@ -285,16 +310,15 @@ flowchart TD
     UI_WM --> UI_TOGGLE["Toggle"]
     UI_WM --> UI_DIV["Divider"]
     UI_WM --> UI_STAT["StatusBar"]
-    UI_WM --> UI_SPRITE["Sprite (widget placeholder)"]
     UI_TK --> UI_FORM["Form"]
     UI_TK --> UI_DIALOG["Dialog"]
     UI_WM -->|"render all →"| CORE_CANVAS
   end
 
   %% ─── TileMap ────────────────────────────────────────────────────
-  subgraph TILEMAP["🗺️ ui/ — TileMap + Camera"]
+  subgraph TILEMAP["🗺️ ui/ — TileMap + TileCamera"]
     TM_TILE["TileMap{tiles,collision}"] -->|"render / render_with_camera"| CORE_CANVAS
-    TM_CAM["Camera"] --> TM_TILE
+    TM_CAM["TileCamera"] --> TM_TILE
     TM_PLAT["generate_platformer"] --> TM_TILE
     TM_CAVE["generate_cave"] --> TM_TILE
     TM_TILE --- TM_COL["tile_collide / is_solid"]

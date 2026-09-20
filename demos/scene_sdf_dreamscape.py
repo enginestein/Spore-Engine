@@ -7,13 +7,13 @@ from spore_engine.core.geom import Vec3
 
 _g_scene = None
 def scene_sdf_dreamscape(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
-    """SDF Dreamscape — Floating islands, glowing crystals, volumetric fog, orbiting lights"""
+    """SDF Dreamscape - Floating islands, glowing crystals, volumetric fog, orbiting lights"""
     global _g_scene
     if _g_scene is None:
         _g_scene = SDFScene()
         _g_scene.ambient = Color(15, 12, 30)
 
-        # Simpler island — 2 ops instead of 3
+        # Simpler island - 2 ops instead of 3
         def ground(p):
             return sd_plane(p, Vec3(0, 1, 0), -1.5)
 

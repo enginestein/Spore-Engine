@@ -1,14 +1,14 @@
 import math
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, Cylinder, Sphere, Plane
+from spore_engine.render3d.raytracer import RayScene, Cylinder, Sphere, Plane
 
 
 _scene = None
 def scene_raytracer_alien(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(18, 22, 35)
         _scene.objects.append(Plane(0, 1, 0, -3.0, Color(25, 35, 30), reflect=0.3))
         trunks = [

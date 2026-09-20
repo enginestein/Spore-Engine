@@ -1,14 +1,14 @@
 import math
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, Box
+from spore_engine.render3d.raytracer import RayScene, Box
 
 
 _scene = None
 def scene_raytracer_toybox(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(30, 32, 50)
         _scene.bg_color = Color(10, 12, 25)
         _scene.objects.append(Box(-1.3, 0, 2.5, 1.3, 1.3, 1.3, Color(255, 50, 70), reflect=0.55))

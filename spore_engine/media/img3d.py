@@ -14,7 +14,7 @@ def image_to_heightfield(path: str,
                           base_width: float = 6.0) -> Mesh3D:
     """Load an image and build a coloured heightfield Mesh3D.
 
-    Brighter pixels → higher elevation.  Face colours come from the
+    Brighter pixels -> higher elevation.  Face colours come from the
     original image so you get both shape and colour.
     """
     from PIL import Image

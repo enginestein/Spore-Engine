@@ -10,9 +10,9 @@ SHADE = ' .:-=+*#%@'
 SHADE_REV = '@%#*+=-:. '
 
 
-# ═══════════════════════════════════════════════════════════════════
-# IMAGE → ASCII
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# IMAGE -> ASCII
+# -------------------------------------------------------------------
 
 def image_to_canvas(path: str, width: int = 80, height: Optional[int] = None,
                     invert: bool = False, color: bool = True) -> Canvas:
@@ -84,9 +84,9 @@ def _image_to_canvas_ffmpeg(path: str, width: int = 80, height: Optional[int] = 
     return c
 
 
-# ═══════════════════════════════════════════════════════════════════
-# VIDEO → ASCII
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# VIDEO -> ASCII
+# -------------------------------------------------------------------
 
 def _probe_size(path: str) -> tuple[int, int]:
     try:
@@ -124,7 +124,7 @@ def video_to_ascii(path: str, width: int = 80, height: Optional[int] = None,
         height: Output ASCII height (auto if None)
         fps: Output framerate (auto from source if None)
         max_frames: Max frames to extract (0 = all)
-        invert: Invert luminance→character mapping
+        invert: Invert luminance->character mapping
         color: Preserve color (True) or grayscale (False)
         on_progress: Callback(progress_float) during conversion
 
@@ -222,9 +222,9 @@ def video_to_player(path: str, width: int = 80, height: Optional[int] = None,
     return v.to_player(loop=loop)
 
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # SCREEN CAPTURE (bonus: record terminal as ASCII video)
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 class ScreenRecorder:
     """Records Canvas frames into a Video for later playback/save."""

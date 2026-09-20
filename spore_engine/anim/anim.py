@@ -1,7 +1,7 @@
 from __future__ import annotations
 import math
 
-# ── EASING FUNCTIONS ─────────────────────────────────────────────
+# -- EASING FUNCTIONS ---------------------------------------------
 
 def linear(t: float) -> float:
     return max(0, min(1, t))
@@ -126,7 +126,7 @@ EASING = {
 }
 
 
-# ── TWEEN ─────────────────────────────────────────────────────────
+# -- TWEEN ---------------------------------------------------------
 
 class Tween:
     def __init__(self, duration: float = 1.0, easing: str = 'linear',
@@ -171,7 +171,7 @@ class Tween:
         self._done = False
 
 
-# ── SEQUENCE ──────────────────────────────────────────────────────
+# -- SEQUENCE ------------------------------------------------------
 
 class Sequence:
     def __init__(self, *steps: tuple[float, str] | Tween):
@@ -211,7 +211,7 @@ class Sequence:
             s.reset()
 
 
-# ── OSCILLATOR ────────────────────────────────────────────────────
+# -- OSCILLATOR ----------------------------------------------------
 
 class Oscillator:
     def __init__(self, period: float = 1.0, min_val: float = 0.0,
@@ -226,7 +226,7 @@ class Oscillator:
         return self.min + (self.max - self.min) * (0.5 + 0.5 * math.sin(phase))
 
 
-# ── TIMER / TICKER ────────────────────────────────────────────────
+# -- TIMER / TICKER ------------------------------------------------
 
 class Ticker:
     def __init__(self, interval: float = 1.0, repeat: bool = True):
@@ -251,7 +251,7 @@ class Ticker:
         self._done = False
 
 
-# ── ENTITY ─────────────────────────────────────────────────────────
+# -- ENTITY ---------------------------------------------------------
 
 class Entity:
     def __init__(self, x: float = 0, y: float = 0):
@@ -273,7 +273,7 @@ class Entity:
         self.y += dy
 
 
-# ── ANIMATOR ───────────────────────────────────────────────────────
+# -- ANIMATOR -------------------------------------------------------
 
 class Animator:
     def __init__(self, target: Entity, duration: float = 1.0,
@@ -318,7 +318,7 @@ class Animator:
         self.active = True
 
 
-# ── PATH ───────────────────────────────────────────────────────────
+# -- PATH -----------------------------------------------------------
 
 class Path:
     def __init__(self, *points: tuple[float, float]):
@@ -381,18 +381,17 @@ class PathFollower:
         return self.tween.done
 
 
-# ── INTERPOLATORS ─────────────────────────────────────────────────
+# -- INTERPOLATORS -------------------------------------------------
 
-def lerp(a: float, b: float, t: float) -> float:
+# Single canonical versions live in core.util (clamp/smoothstep/lerp/
+# lerp_color); anim re-exports those same objects so the names never
+# drift between subpackages. lerp_tuple keeps a private clamped helper
+# so out-of-range t values interpolate safely.
+from ..core.util import lerp, lerp_color
+
+def _lerp_capped(a, b, t):
     return a + (b - a) * max(0, min(1, t))
 
-def lerp_color(c1, c2, t: float):
-    from ..core.color import Color
-    return Color(
-        int(c1.r + (c2.r - c1.r) * t),
-        int(c1.g + (c2.g - c1.g) * t),
-        int(c1.b + (c2.b - c1.b) * t),
-    )
 
 def lerp_tuple(a: tuple, b: tuple, t: float) -> tuple:
-    return tuple(lerp(a[i], b[i], t) for i in range(len(a)))
+    return tuple(_lerp_capped(a[i], b[i], t) for i in range(len(a)))

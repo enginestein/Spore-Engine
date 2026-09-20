@@ -1,8 +1,8 @@
 from ..core.color import Color, WHITE, BLACK, DIM
-from .sprite import Sprite
+from .sprite import GameSprite
 
 
-class Button:
+class SimpleButton:
     def __init__(self, text, x=0, y=0, width=None, fg=None, bg=None, on_click=None):
         self.text = text
         self.x = x
@@ -26,7 +26,7 @@ class Button:
         lines.append(f"┌{border}┐")
         lines.append(f"│{' ' * pad}{text_padded}{' ' * pad}│")
         lines.append(f"└{border}┘")
-        self._sprite = Sprite('\n'.join(lines), self.x, self.y, self.fg, self.bg, z=10)
+        self._sprite = GameSprite('\n'.join(lines), self.x, self.y, self.fg, self.bg, z=10)
 
     @property
     def bounds(self):
@@ -54,7 +54,7 @@ class Button:
         return self
 
 
-class Label:
+class SimpleLabel:
     def __init__(self, text, x=0, y=0, fg=None, z=0):
         self.text = text
         self.x = x
@@ -66,7 +66,7 @@ class Label:
         canvas.draw_text(self.x, self.y, self.text, self.fg, z=self.z)
 
 
-class Dialog:
+class SimpleDialog:
     def __init__(self, title, message, x=None, y=None, width=None, height=None):
         self.title = title
         self.message = message

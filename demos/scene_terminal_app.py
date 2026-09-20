@@ -84,10 +84,10 @@ def scene_terminal_app(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
 
     form = Form(1, 2, width=28, title='Terminal App',
                 fg=Color(180, 180, 220), accent=Color(100, 200, 255))
-    name_input = Input(0, 0, 14, placeholder='Enter name')
+    name_input = TextField(0, 0, 14, placeholder='Enter name')
     name_input.text = s.get('edit_text', '')
     form.add_field('Name', name_input)
-    age_input = Input(0, 0, 5, placeholder='Age')
+    age_input = TextField(0, 0, 5, placeholder='Age')
     form.add_field('Age', age_input)
     form.add_field('Enabled', Checkbox(0, 0, '', True))
     form.render(c, z=40)

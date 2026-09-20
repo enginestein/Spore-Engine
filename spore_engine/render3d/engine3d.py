@@ -188,6 +188,11 @@ def render_mesh_solid(hires: HiResCanvas, mesh: Mesh3D,
                       light_dir: Vec3 = LIGHT_DEFAULT,
                       color_override: Optional[list[Color]] = None,
                       z_offset: float = 0):
+    """Rasterize a mesh with a per-pixel z-buffer.
+
+    Depth is interpolated across each polygon and depth-tested per pixel,
+    so intersecting meshes resolve correctly (painter's algorithm does not).
+    """
     mat = proj_mat * view_mat
     proj_verts = []
     for v in mesh.verts:
@@ -195,42 +200,54 @@ def render_mesh_solid(hires: HiResCanvas, mesh: Mesh3D,
         sx = int((p.x + 1) * 0.5 * hires.w)
         sy = int((1 - p.y) * 0.5 * hires.h)
         proj_verts.append((sx, sy, p.z))
-    
-    face_data = []
+
     for fi, face in enumerate(mesh.faces):
         if len(face) < 3: continue
         normal = mesh.face_normal(fi)
         view_dir = Vec3(-view_mat[2,0], -view_mat[2,1], -view_mat[2,2]).norm()
         if normal.dot(view_dir) >= 0: continue
-        depth = mesh.face_depth(fi)
         lighting = max(0.2, normal.dot(light_dir))
         fc = color_override[fi] if color_override and fi < len(color_override) else Color(200, 200, 200)
         shaded = fc.mul(lighting)
-        pts = [proj_verts[v] for v in face]
-        face_data.append((depth, pts, shaded, normal))
-    
-    face_data.sort(key=lambda x: x[0])  # painter's algorithm
-    
-    for depth, pts, color, normal in face_data:
-        ys = [p[1] for p in pts]
-        min_y = max(0, min(ys))
-        max_y = min(hires.h - 1, max(ys))
-        for iy in range(min_y, max_y + 1):
-            xs = []
-            n = len(pts)
-            for i in range(n):
-                x1, y1, _ = pts[i]
-                x2, y2, _ = pts[(i + 1) % n]
-                if y1 == y2:
-                    if y1 == iy:
-                        xs.append(x1); xs.append(x2)
-                    continue
-                if (y1 <= iy < y2) or (y2 <= iy < y1):
-                    t = (iy - y1) / (y2 - y1)
-                    xs.append(int(x1 + t * (x2 - x1)))
-            xs.sort()
-            for k in range(0, len(xs) - 1, 2):
-                xa = max(0, xs[k])
-                xb = min(hires.w - 1, xs[k + 1])
-                for ix in range(xa, xb + 1):
-                    hires.set_pixel_z(ix, iy, color, depth + z_offset)
+        _rasterize_polygon(hires, [proj_verts[v] for v in face], shaded, z_offset)
+
+
+def _rasterize_polygon(hires: HiResCanvas, pts: list[tuple[int, int, float]],
+                       color: Color, z_offset: float = 0):
+    """Scanline-fill a polygon, writing interpolated depth per pixel.
+
+    Linear screen-space interpolation of projected depth is exact for planar
+    faces under a perspective projection, so each pixel gets its true depth
+    and the canvas z-buffer (``set_pixel_z``) resolves occlusion correctly.
+    """
+    ys = [p[1] for p in pts]
+    min_y = max(0, min(ys))
+    max_y = min(hires.h - 1, max(ys))
+    n = len(pts)
+    for iy in range(min_y, max_y + 1):
+        spans = []
+        for i in range(n):
+            x1, y1, z1 = pts[i]
+            x2, y2, z2 = pts[(i + 1) % n]
+            if y1 == y2:
+                if y1 == iy:
+                    spans.append((x1, z1)); spans.append((x2, z2))
+                continue
+            if (y1 <= iy < y2) or (y2 <= iy < y1):
+                t = (iy - y1) / (y2 - y1)
+                spans.append((x1 + t * (x2 - x1), z1 + t * (z2 - z1)))
+        spans.sort(key=lambda s: s[0])
+        for k in range(0, len(spans) - 1, 2):
+            xa, za = spans[k]
+            xb, zb = spans[k + 1]
+            i0 = max(0, math.ceil(xa))
+            i1 = min(hires.w - 1, math.floor(xb))
+            if i0 > i1: continue
+            dx = xb - xa
+            if dx == 0:
+                hires.set_pixel_z(i0, iy, color, za + z_offset)
+                continue
+            dz = (zb - za) / dx
+            for ix in range(i0, i1 + 1):
+                hires.set_pixel_z(ix, iy, color,
+                                  za + (ix - xa) * dz + z_offset)

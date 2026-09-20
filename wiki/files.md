@@ -25,7 +25,7 @@ spore_engine/
 ## Core (`spore_engine/core/`)
 
 ### `__init__.py`
-Re-exports all core types for convenient `from spore_engine import Canvas, Color, ...`.
+Re-exports all core types for convenient `from spore_engine import Canvas, Color, ...`, plus the scene-authoring layer (`SceneState`, `Scene`, `Layer`, `Camera`, `Input`, `KeyState`) and the math utils (`clamp`, `lerp`, `ramp`, `wave`, `osc`, ...).
 
 ### `color.py`
 **`Color`** — Immutable RGB dataclass with ANSI truecolor escape generation, HSV/hex conversion, luminance, lerp, blend, mul, and ANSI 256 approximation.
@@ -41,30 +41,56 @@ Re-exports all core types for convenient `from spore_engine import Canvas, Color
 
 ### `canvas.py`
 **`Cell`** — A single terminal cell: char, fg Color, bg Color, z-depth.
-**`Canvas`** — The primary framebuffer (`w × h` Cell grid). Drawing methods:
-- `set_pixel`, `get_pixel` — with z-depth occlusion test
-- `draw_line` — Bresenham integer line
-- `draw_circle` — Midpoint circle (outline/fill)
-- `draw_ellipse` — Midpoint ellipse
-- `draw_triangle` — Scanline fill
-- `draw_polygon` — General polygon (even-odd fill)
-- `draw_bezier` — Bezier curve evaluation
-- `draw_arc` — Arc segment
-- `draw_rect` — Rectangle (with rounded corners)
-- `gradient_fill` — Horizontal/vertical gradient
-- `gradient_fill_radial` — Radial gradient
-- `fill` — Flood fill (BFS)
-- `draw_text` — Text placement
-- `half_block`, `half_block_pixel` — Unicode half-block primitives
-- `render_to` — ANSI escape code output
-- `copy` — Deep copy
-
-**`HiResCanvas`** — Double-resolution canvas (`w × 2h` buffer). `to_canvas()` maps vertical pixel pairs to half-block chars (▀ ▄ █) for 2× vertical resolution.
+**`Canvas`** — The primary framebuffer (`w × h` Cell grid). Cells start at `z = -inf`; `clear()` resets to `z = -inf`. All drawing lives in `DrawMixin` (see `draw.py`, inherited by both surfaces); `canvas.py` contributes `set_pixel`/`get_pixel` (z-depth occlusion test), `set_pixel_f` (fractional-coordinate pixel), `half_block`/`half_block_pixel` (Unicode half-block primitives), `render_to` (ANSI escape code output), and `copy` (deep copy).
+**`HiResCanvas`** — Double-resolution canvas (`w × 2h` buffer). `to_canvas(canvas, z=0, blank=False)` maps vertical pixel pairs to half-block chars (▀ ▄ █); it *skips empty cells by default* so a pre-drawn background survives, `blank=True` also erases empties.
 **Role:** Everything renders to Canvas (or HiResCanvas). The entire engine's output surface.
+
+### `draw.py`
+**`DrawMixin`** — One shared set of draw primitives inherited by both `Canvas` and `HiResCanvas`:
+- `fill_rect`, `fill` (flood fill), `blit_canvas` (composite another canvas)
+- `draw_text`, `draw_text_at` (9 anchors: `nw n ne | w c e | sw s se`), `draw_text_centered` (x-centered)
+- `draw_line`, `draw_line_thick`, `draw_ray` (fractional segment)
+- `draw_rect` (rounded corners), `draw_circle`, `draw_ellipse`
+- `draw_triangle`, `draw_polygon` (even-odd fill), `draw_bezier`, `draw_arc`
+- `gradient_fill`, `gradient_fill_radial`, `fill_gradient_x`/`fill_gradient_y` (background-only bg gradients), `fill_sky` (sky gradient split at a horizon)
+- `noise` (Perlin-style value-noise fill)
+Every primitive takes a trailing `z=` depth (default 0). Lazy `_shade_chars()` helper avoids a circular import with `canvas.py`.
+**Role:** The single source of truth for all vector/bitmap drawing.
 
 ### `sprite.py`
 **`Sprite`** — ASCII art sprite with `from_string()`, `from_file()`, `blit_to(canvas)`, mirror, rotate, scale.
 **Role:** Reusable ASCII art assets (tiles, logos, decorations).
+
+### `state.py`
+**`SceneState`** — Per-scene scratch memory shared across frames and scene restarts. Supports `st.tick(dt)` (`st.t += dt`), attribute access, `get(key, default, factory=)`, `__contains__`, iteration, and `clear()`.
+**`scene_state(name)`** — Returns the shared `SceneState` for a scene (same object every call).
+**`clear_scene_states()`** — Wipe all states (e.g. when a scene restarts).
+**`list_scene_states()`** — Names of every created state.
+**Role:** Replaces ad-hoc module-level `_GLOB = None` caches in demos.
+
+### `scene.py`
+**`Scene`** — Composes a `Canvas` + `HiResCanvas` (`s.hr`) + named `Layer`s into one object. `__getattr__` forwards unknown attributes to `s.canvas`, so a Scene drops in wherever a Canvas is expected. `compose()` stacks hr over canvas; `present(stream)` renders.
+**`Layer`** — Named canvas with a `z`, forwards draw calls to its own canvas.
+**Role:** Grouped/background+foreground drawing for games and HUDs.
+
+### `camera.py`
+**`Camera`** — 2D viewport onto a larger world. `to_screen`/`to_world` (with `zoom`), edges via `left/right/top/bottom`, `in_view()`, smoothed `follow(x, y, dt)` with world-bound `clamp()`, and draw helpers (`draw`, `draws`, `draw_line`, `draw_text`) that transform world coords.
+**Role:** Scrolling world/camera rendering (used by `easy.App` and games).
+
+### `input.py`
+**`Input`** — Pull-based terminal input with a real event model: `events(timeout)` pulls a batch of `KeyEvent` / `MouseEvent` / `ResizeEvent` each frame; `poll(timeout)` returns the next key *press* (`None` if nothing), `get()` blocks, `available()` is non-blocking. Decodes arrows/SS3, F1–F12, Home/End, PgUp/PgDn, Insert/Delete, Shift-Tab, ctrl-c/d/z, Enter/Space/Tab/Backspace/Escape, printable chars, and multi-byte UTF-8. Since terminals only report presses/repeats, releases are *synthesized*: a key silent for `release_delay` emits `KeyEvent(down=False)`, and a repeat arriving within `repeat_grace` continues the hold — so holds never depend on terminal key auto-repeat. `enable_mouse()` turns on SGR mouse reports (press/release/move/scroll) and resize arrives both from CSI `8;…t` reports and from polling (`ResizeEvent`). `raw()` context manager / `enter_raw()`/`exit_raw()` for tty raw mode (POSIX `termios`; guarded so the module imports on non-POSIX too).
+**`KeyState`** — Tracks held keys between frames: `update(events)` sets `down`/`just_pressed`/`just_released` edge flags (repeats don't re-trigger presses), plus `press`/`release`/`held`/`clear` and `in` operator.
+**`open_input(fd)`** — Factory.
+**`KEY_*`** — String constants for decoded key names.
+**Role:** Real-time keyboard/mouse/resize input for games and `easy.App`.
+
+### `util.py`
+**`clamp`, `lerp`, `ir`** — Value remapping and rounding.
+**`ramp`** — Map `0..1` to a shade glyph (` .:-=+*#%@`).
+**`phase`, `wave`, `osc`, `bounce`** — Saw/sine/triangle oscillation helpers.
+**`in_bounds`, `approach`, `move_toward`, `dist`** — Spatial/setpoint helpers.
+**`lerp_color`, `smoothstep`, `ramp_color`** — Colour and easing helpers.
+**Role:** Small math/game helpers used across scenes and `screenfx.py`.
 
 ---
 
@@ -110,7 +136,8 @@ Re-exports all core types for convenient `from spore_engine import Canvas, Color
 
 ### `screenfx.py`
 Screen-space effects: `shake` (random offset), `fade_overlay` (color blend), `flash` (white burst), `crossfade`, `color_overlay`, `vignette`, `scanlines`.
-**Role:** Camera/screen effects for dynamic scenes.
+**`ScreenFX`** — Stateful, time-driven manager: `add_shake(power, dur)`, `add_flash(alpha, dur)`, `add_fade(color, dur, inverse)`; per frame call `tick(dt)` then `apply(canvas, seed)` (after the scene renders). `active` reports whether any effect is running. Used by `easy.App` (`app.screen_fx`/`app.fx`).
+**Role:** Camera/screen effects for dynamic scenes and games.
 
 ### `shaders.py`
 16 modular shaders in a `ShaderPipeline` framework:
@@ -143,9 +170,8 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 - Face normal calculation via cross product.
 - Back-face culling via normal·view_direction.
 - Lambertian diffuse lighting.
-- Painter's algorithm depth sorting.
 **`render_mesh_wireframe()`** — Project vertices, draw edges with depth-based shading.
-**`render_mesh_solid()`** — Project faces, scanline fill with lighting.
+**`render_mesh_solid()`** — Project faces, scanline fill with per-pixel z-buffer depth testing (handles intersecting meshes).
 **Role:** All 3D polygonal rendering.
 
 ### `isometric.py`
@@ -155,9 +181,13 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 **Role:** 2.5D isometric terrain rendering.
 
 ### `raytracer.py`
-**`Scene`** — Ray tracing scene with `Sphere` and `Plane` primitives.
-- **Sphere intersection:** Quadratic formula.
-- **Plane intersection:** Ray-plane equation.
+**`Ray`** — Ray primitive (origin + direction) with factory helpers.
+**`RayScene`** — Ray tracing scene container with `add()`, `add_light()`, `trace()`, and `render()`.
+- **`Sphere` intersection:** Quadratic formula.
+- **`Plane` intersection:** Ray-plane equation.
+- **`Box`** — Axis-aligned box primitive (slab method intersection).
+- **`Cylinder`** — Vertical cylinder primitive with cap intersection.
+- **`TexturedQuad`** — UV-textured quad primitive (image/checker mapping) with `color_at()`.
 - **Phong lighting:** Diffuse + Blinn-Phong specular + ambient.
 - **Shadow rays:** Occlusion test toward each light.
 - **Reflection:** Recursive (max depth 3) using reflection vector `R = D − 2(N·D)·N`.
@@ -169,7 +199,7 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 
 ### `sdf.py`
 **Primitives** — `sd_sphere()`, `sd_box()`, `sd_torus()`, `sd_cylinder()`, `sd_plane()` — Signed distance functions for basic shapes.
-**Operations** — `op_union()`, `op_subtract()`, `op_intersect()`, `op_smooth_union()`, `op_repeat()` — CSG composition and repetition.
+**Operations** — `op_union()`, `op_subtract()`, `op_intersect()`, `op_smooth_union()`, `op_round()`, `op_repeat()` — CSG composition, rounding, and repetition.
 **`SDFScene`** — Full ray-marched SDF renderer with Phong lighting, shadows, reflections (recursive, depth 4), and adaptive stepping. Renders via `render()` (block averaging) and `render_preview()` (shade characters).
 **Role:** Signed distance field ray-marching for 3D rendering.
 
@@ -225,7 +255,7 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 **`Body3D`** — 3D spherical rigid body with semi-implicit Euler integration, gravity, boundary collision, and restitution.
 **`BoxBody3D`** — 3D box rigid body with vertex computation and inertia tensor.
 **`Spring3D`** — 3D Hooke's law spring with damping connecting two bodies.
-**`PhysicsWorld3D`** — 3D physics world managing bodies, springs, collision detection/resolution, and chain generation.
+**`PhysicsWorld3D`** — 3D physics world managing bodies, springs, collision detection/resolution, and chain generation. **`GRAVITY3D`** — Default gravity constant.
 **Role:** 3D physics simulation.
 
 ### `softbody.py`
@@ -268,11 +298,11 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 **Role:** Procedural game world generation.
 
 ### `biome_terrain.py`
-**`BiomeMap`** — 12-biome terrain maps (ocean, beach, desert, grassland, forest, rainforest, tundra, taiga, mountain, swamp, snow, river) driven by elevation + moisture + temperature.
+**`BiomeMap`** — 12-biome terrain maps (ocean, beach, desert, grassland, forest, rainforest, tundra, taiga, mountain, swamp, snow, river) driven by elevation + moisture + temperature. Includes `color_at()` and a compact `render_minimap()`.
 **Role:** Realistic biome distribution.
 
 ### `splines.py`
-**`quadratic_bezier()`**, **`cubic_bezier()`**, **`catmull_rom()`** — Curve evaluation.
+**`lerp_point()`**, **`quadratic_bezier()`**, **`cubic_bezier()`**, **`catmull_rom()`** — Curve evaluation.
 **`render_bezier()`**, **`render_catmull_rom()`** — Curve rendering with de Casteljau visualization.
 **Role:** Smooth curve generation.
 
@@ -292,11 +322,11 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 
 ### `wfc.py`
 **`WFCTile`** — A single tile with character, colors, edge patterns per direction, and selection probability.
-**`WFC`** — Wave Function Collapse implementation with entropy-based tile selection, constraint propagation, and retry on contradiction. Factory methods: `simple_path_tiles()`, `simple_platformer_tiles()`.
+**`WFC`** — Wave Function Collapse implementation with entropy-based tile selection, constraint propagation, and retry on contradiction. Factory methods: `simple_path_tiles()`, `simple_platformer_tiles()`, and `add_tile_from_sample()` to build tiles from a character/color sample.
 **Role:** Tile-based procedural generation via constraint solving.
 
 ### `pathfinding.py`
-**`AStar`** — A* pathfinder on a weighted grid with diagonal movement, obstacle definition, tile-grid import, visited-node tracking, and step limit. Includes path reconstruction and debug rendering.
+**`AStar`** — A* pathfinder on a weighted grid with diagonal movement, obstacle definition, tile-grid import, visited-node tracking, and step limit. Includes path reconstruction and debug rendering, plus `from_maze_walls()` to import a maze wall layout.
 **Role:** Grid-based pathfinding for AI movement.
 
 ### `delaunay.py`
@@ -325,7 +355,7 @@ Full TUI widget toolkit:
 - **`Menu`** — Selectable list
 - **`TabBar`** — Tabbed container
 - **`Table`** — Scrollable data table
-- **`Input`** — Text input field
+- **`TextField`** — Text input field
 - **`Toggle`** — On/off switch
 - **`Frame`** — Bordered container
 - **`Divider`** — Horizontal rule
@@ -344,8 +374,8 @@ Full TUI widget toolkit:
 **Role:** Pixel-accurate text rendering at character level.
 
 ### `tilemap.py`
-**`TileMap`** — 2D tile grid with collision. Auto-tile box drawing. Platformer and cave generators.
-**`Camera`** — Smooth-follow camera with boundary clamping.
+**`TileMap`** — 2D tile grid with collision. Auto-tile box drawing (`auto_tile_char`). Platformer and cave generators.
+**`TileCamera`** — Smooth-follow camera with boundary clamping.
 **`tile_collide()`** — AABB vs tile grid collision.
 **Role:** Tile-based game worlds.
 
@@ -361,7 +391,7 @@ Full TUI widget toolkit:
 **`Entity`** — Base animated entity with x, y, scale, rotation, opacity.
 **`Animator`** — Tweens entity attributes.
 **`Path` / `PathFollower`** — Path-following animation.
-**Easing functions** — 9 functions: linear, quad_in/out, cubic_in/out, bounce_out, elastic_out, sine_in_out, expo_out.
+**Easing functions** — 31 functions (top-level exports `linear`, `quad_in/out`, `cubic_in/out`, `bounce_out`, `elastic_out`, `sine_in_out`, `expo_out`; full module adds quart/quint/sine/expo/circ/back/bounce/elastic in/in_out variants) plus an `EASING` name lookup dict.
 **Role:** General-purpose animation engine.
 
 ### `timeline.py`
@@ -382,22 +412,22 @@ Full TUI widget toolkit:
 A beginner-friendly high-level layer that wraps the engine's primitives into dead-simple sprite, animation, and app classes.
 
 ### `__init__.py`
-Exports `App`, `Sprite`, `Anim`, `Button`, `Label`, `Dialog`, `map_range`, `clamp`, `smoothstep`, `lerp_color`, `random_color`.
+Exports `App`, `GameSprite`, `Anim`, `SimpleButton`, `SimpleLabel`, `SimpleDialog`, `map_range`, `clamp`, `smoothstep`, `lerp_color`, `random_color`. The math helpers are the same objects as `core.util`'s — one canonical version package-wide.
 
 ### `app.py`
-**`App`** — Self-contained application with auto main loop, Canvas management, sprite registration, keyboard input, and background fills. Call `App().run()` and you're done. Supports `bg()`, `bg_gradient()`, `bg_art()` for backgrounds, and `on_tick`/`on_key`/`on_any_key`/`on_click`/`on_init` event handlers.
+**`App`** — Self-contained application with auto main loop, Canvas + HiResCanvas management, sprite registration, raw-mode keyboard input (core `Input` with arrow/F-key decoding), an optional world `Camera`, `ScreenFX` (shake/flash/fade), scene transitions, and background fills. Call `App().run()` and you're done. Supports `bg()`, `bg_gradient()`, `bg_art()` for backgrounds, `sprite(..., hires=True)` for double-res sprites, and `on_tick`/`on_key`/`on_any_key`/`on_click`/`on_init` event handlers. `_render_frame()` renders the pipeline (bg → sorted sprites → camera transform → `hr.to_canvas` → title → transition → `screen_fx`) without writing to stdout, so scene-harness wrappers can reuse it.
 
 ### `sprite.py`
-**`Sprite`** — Sprites defined by multi-line ASCII art strings. Properties: `x`, `y`, `z`, `fg`, `bg`, `opacity`, `scale_x`, `scale_y`, `rotation`, `visible`, `bounds`. Methods: `set_art()`, `set_pixel()`, `draw_text()`, `move_to()`, `move_by()`, `spin()`, `pulse()`, `wobble()`, `fade_to()`, `fade_in()`, `fade_out()`, `scale_to()`, `wait()`, `then()`, `clear_anims()`, `contains()`, `copy()`. Factory methods: `Sprite.rect()`, `Sprite.circle()`, `Sprite.from_file()`.
+**`GameSprite`** — Animated game sprites defined by multi-line ASCII art strings. Properties: `x`, `y`, `z`, `fg`, `bg`, `opacity`, `scale_x`, `scale_y`, `rotation`, `visible`, `bounds`. Methods: `set_art()`, `set_pixel()`, `draw_text()`, `move_to()`, `move_by()`, `spin()`, `pulse()`, `wobble()`, `fade_to()`, `fade_in()`, `fade_out()`, `scale_to()`, `wait()`, `then()`, `clear_anims()`, `contains()`, `copy()`. Factory methods: `GameSprite.rect()`, `GameSprite.circle()`, `GameSprite.from_file()`. (Named `GameSprite`, not `Sprite`, so it never clashes with the core art `Sprite`.)
 
 ### `anim.py`
 **`Anim`** — Internal animation object. Fluent API via `.to(x, y)`, `.fade(opacity)`, `.scale(s)`, `.over(duration)`, `.ease(name)`, `.loop()`, `.yoyo()`, `.delay(sec)`, `.then(callback)`, `.forever()`. Supports tween-based movement, spin, pulse, wobble, and delay.
 
 ### `widgets.py`
-Lightweight GUI widgets: **`Button`** (clickable with border), **`Label`** (static text), **`Dialog`** (modal overlay with title, message, and buttons).
+Lightweight GUI widgets: **`SimpleButton`** (clickable with border), **`SimpleLabel`** (static text), **`SimpleDialog`** (modal overlay with title, message, and buttons). Named `Simple*` so they never clash with the full-featured `ui` widgets.
 
 ### `util.py`
-Helper functions: `map_range()`, `clamp()`, `smoothstep()`, `lerp_color()`, `random_color()`.
+Helper functions: `map_range()`, `random_color()`; `clamp()`, `smoothstep()`, `lerp_color()` are re-exported straight from `core.util` (the same objects — one canonical version package-wide).
 
 ---
 
@@ -413,8 +443,10 @@ Helper functions: `map_range()`, `clamp()`, `smoothstep()`, `lerp_color()`, `ran
 ### `imaging.py`
 **`ImageConverter`** — RGB data → shaded/edge-detected ASCII.
 **`canvas_from_text()`** — Parse multiline string to Canvas.
+**`canvas_to_ascii()`** — Convert a Canvas back to ASCII art text.
 **`scale_canvas()`** — Nearest-neighbor resize.
 **`gradient_canvas()`** — Gradient-filled canvas.
+**`make_checkerboard()`** — Generate a checkerboard pattern canvas.
 **Role:** Utility image operations.
 
 ### `video.py`
@@ -448,7 +480,7 @@ Helper functions: `map_range()`, `clamp()`, `smoothstep()`, `lerp_color()`, `ran
 
 ### `demo.py`
 Main interactive demo launcher:
-- 127+ scenes with keyboard controls (n/p/space/q/arrows)
+- 134 registered scenes with keyboard controls (n/p/space/q; arrow keys are passed to the active scene)
 - Transition effects between scenes (fade, wipe, slide, checkerboard, dissolve)
 - Auto-play mode when not in TTY
 - Particle system overlay
@@ -458,7 +490,7 @@ Main interactive demo launcher:
 Simple API demo: creates sprites from ASCII art, chains animations (move_to, spin, pulse, scale_to) with easing functions, uses keyboard input binding, text placement, and programmatic sprite drawing via `App().run()`.
 
 ### Scene Files (`demos/scene_*.py`)
-90 files containing 127+ scene functions. Each scene receives `(canvas, hires_canvas, time, particle_system, dt)` and renders into the canvas. Organized by category:
+~90 files providing the 134 entries in `demos.SCENES`. Each scene function receives `(canvas, hires_canvas, time, particle_system, dt)` and renders into the canvas. Organized by category:
 
 - **3D:** scene_3d.py, scene_raycaster, scene_raytracer, scene_voxel_world, scene_sdf_*.py
 - **Effects:** scene_fx.py, scene_particles, scene_shaders, scene_postfx, scene_shader_symphony
@@ -469,4 +501,5 @@ Simple API demo: creates sprites from ASCII art, chains animations (move_to, spi
 - **Advanced:** scene_wfc, scene_sdf, scene_marching_cubes, scene_softbody, scene_ik, scene_steering, scene_delaunay, scene_volumetric
 - **Visual:** scene_landscape, scene_aurora, scene_aurora_storm, scene_black_hole, scene_god_rays, scene_neon_cathedral, scene_cosmic_tunnel, scene_ethereal_ruins, scene_stained_glass, scene_golden_city, scene_astral_cathedral, scene_phoenix, scene_celestial_temple, scene_starry_night, scene_prism_raytracer, etc.
 - **Simple:** easy_demo
+- **App:** scene_platformer (Moon Platformer) — runs through `easy.App` (camera follow, raw-mode arrow keys, hi-res coins, ScreenFX shake/flash); standalone via `python3 -m demos.scene_platformer`
 - **Media:** scene_media_player, scene_video_player, scene_glyph_art, scene_photo_ascii, scene_raytracer_photo

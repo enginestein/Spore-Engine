@@ -193,6 +193,10 @@ class Menu(Widget):
             mx, my = data
             if self.contains(mx, my):
                 if self.callback: self.callback(self.selected, self.items[self.selected])
+        elif event_type == 'mouse_wheel':
+            dx, dy = data
+            if not self.items: return
+            self.selected = (self.selected - dy) % len(self.items)
 
     def render(self, canvas: Canvas, z: float = 0):
         if not self.visible: return
@@ -480,6 +484,10 @@ class Table(Widget):
             elif data in ('enter', '\r'):
                 if self.callback and self.rows:
                     self.callback(self.selected, self.rows[self.selected])
+        elif event_type == 'mouse_wheel':
+            dx, dy = data
+            if not self.rows: return
+            self.selected = max(0, min(len(self.rows) - 1, self.selected + dy))
 
     def _render_row(self, canvas, py, cells, is_header, is_select, z):
         x = self.x
@@ -519,7 +527,7 @@ class Table(Widget):
             py += 1
 
 
-class Input(Widget):
+class TextField(Widget):
     def __init__(self, x: int, y: int, width: int = 20,
                  label: str = '', placeholder: str = '',
                  fg: Color = WHITE, bg: Color = Color(20, 20, 35),
@@ -773,7 +781,7 @@ class WidgetManager:
                 if w.contains(mx, my):
                     self._mouse_down_widget = w
                     w.handle_event(event_type, data)
-                    if isinstance(w, (Button, Checkbox, Toggle, Slider, Input)):
+                    if isinstance(w, (Button, Checkbox, Toggle, Slider, TextField)):
                         if w in self.focusable:
                             self.focused_idx = self.focusable.index(w)
                             for i, fw in enumerate(self.focusable):
@@ -783,6 +791,18 @@ class WidgetManager:
             if self._mouse_down_widget:
                 self._mouse_down_widget.handle_event(event_type, data)
             self._mouse_down_widget = None
+        elif event_type == 'mouse_wheel':
+            dx, dy, mx, my = data
+            self.mouse_pos = (mx, my)
+            target = None
+            for w in reversed(self.widgets):
+                if w.visible and w.contains(mx, my):
+                    target = w
+                    break
+            if target is None:
+                target = self.get_focused()
+            if target is not None:
+                target.handle_event('mouse_wheel', (dx, dy))
         elif event_type == 'key_down':
             focused = self.get_focused()
             if focused:

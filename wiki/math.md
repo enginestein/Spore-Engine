@@ -150,6 +150,23 @@ B(t) = \sum_{j=0}^{n} \binom{n}{j} \cdot t^{\,j} \cdot (1-t)^{\,n-j} \cdot P_j
 $$
 where $\binom{n}{j} = \frac{n!}{j! \cdot (n-j)!}$. Quadratic ($n=2$) uses 3 control points, cubic ($n=3$) uses 4. Evaluated at $\text{steps}+1$ evenly-spaced $t$ values.
 
+### Catmull-Rom Splines — `spore_engine/gen/splines.py`
+
+A cubic interpolating spline that passes through all control points (no control-point lattice, unlike Bezier). Given points $P_0, P_1, P_2, P_3$, the segment between $P_1$ and $P_2$ is:
+
+$$
+C(t) = \frac12 \begin{bmatrix} 1 & t & t^2 & t^3 \end{bmatrix}
+\begin{bmatrix}
+0 & 2 & 0 & 0 \\
+-1 & 0 & 1 & 0 \\
+2 & -5 & 4 & -1 \\
+-1 & 3 & -3 & 1
+\end{bmatrix}
+\begin{bmatrix} P_0 \\ P_1 \\ P_2 \\ P_3 \end{bmatrix}
+$$
+
+The tangents at interior points are automatically computed from neighboring points, producing smooth interpolation through every control point.
+
 ### Half-Block Rendering (HiResCanvas)
 Doubles vertical resolution by mapping two physical pixels (top/bottom) to a single terminal cell using Unicode half-blocks:
 
@@ -682,6 +699,16 @@ $$
 - `EDGE_TABLE[256]`: bitmask of intersected edges per configuration
 - `TRI_TABLE[256]`: variable-length triangle vertex indices (referencing 12 cube edges)
 
+### Marching Squares — `spore_engine/gen/terrain.py`
+
+The 2D analogue of marching cubes, used for contour-line extraction from heightmaps (`marching_squares()`). For each cell in a scalar grid:
+1. Evaluate the value at all 4 corners; classify each as above or below the contour level.
+2. Build a 4-bit index (one bit per corner) — 16 possible configurations.
+3. Look up which cell edges the contour crosses and interpolate the crossing points linearly.
+4. Connect interpolated points into line segments along the edges.
+
+The 16 lookup cases are symmetric: 1 fully-inside, 1 fully-outside, and 14 boundary cases (4 with a single crossing edge pair, 2 ambiguous saddle cases handled by a tie-break rule).
+
 ---
 
 ## 22. Isometric Projection
@@ -838,3 +865,107 @@ $$
 \text{if } \text{rand}(x,y) < t:\; \text{dst},\; \text{else } \text{src}
 $$
 The random map is pre-computed per transition instance.
+
+---
+
+## 28. Animation Easing Functions — `spore_engine/anim/anim.py`
+
+31 easing curves transform a normalized input $t \in [0,1]$ into an eased output. Each family has `_in` (accelerating), `_out` (decelerating), and `_in_out` (S-curve) variants:
+
+- **quad** — $t^2$, $(1-t)^2$
+- **cubic** — $t^3$
+- **quart** — $t^4$
+- **quint** — $t^5$
+- **sine** — $\sin(t \cdot \pi/2)$
+- **expo** — $2^{10(t-1)}$ style exponential
+- **circ** — $\sqrt{1 - (t-1)^2}$ circular arc
+- **back** — overshoots past the target ($s$-offset), then settles
+- **bounce** — ball-like bouncing decay, $\text{out}$ ends with $4$ decreasing bounce heights
+- **elastic** — damped oscillation with a base-2 exponential envelope
+- **linear** — identity, for tweening without easing
+
+The `_out` forms are typically composed as $1 - f(1-t)$, and `_in_out` as $f(2t)/2$ for $t < 0.5$ and $1 - f(2-2t)/2$ otherwise. All are exposed through the `EASING` name dict for string lookup.
+
+---
+
+## 29. Post-Processing Filters — `spore_engine/fx/postfx.py` & `spore_engine/fx/shaders.py`
+
+### Convolution (box blur, glow, edge detection, Kuwahara)
+
+Most filters are separable or local-window operations over each cell. A 2D convolution computes each output pixel as a weighted sum of its neighbors:
+
+$$
+\text{out}(x,y) = \sum_{dx=-r}^{r} \sum_{dy=-r}^{r} w(dx,dy) \cdot \text{in}(x+dx, y+dy)
+$$
+
+- **box_blur** — uniform kernel $w = 1/(2r+1)^2$ (low-pass).
+- **glow (bloom)** — pixels above a luminance threshold are extracted, blurred, and additively blended back.
+- **edge_detect** — Sobel gradient magnitude: $G = \sqrt{G_x^2 + G_y^2}$ with $G_x, G_y$ computed via the $3\times3$ Sobel kernels, then inverted (strong gradient ⇒ outline).
+- **KuwaharaFilter** — divides the neighborhood into 4 quadrants, outputs the quadrant with the lowest variance, producing a flat, painterly (edge-preserving) result.
+
+### Floyd-Steinberg Error Diffusion Dithering
+
+Converts an image to a limited palette by diffusing quantization error to neighboring pixels with the weights:
+
+$$
+\text{error} \cdot \begin{bmatrix} & \frac{7}{16} & \\ \frac{3}{16} & \frac{5}{16} & \frac{1}{16} \end{bmatrix}
+$$
+
+The current pixel's quantization error is spread right, down-left, down, and down-right, so the average color is preserved over the whole image.
+
+### Other Effects
+
+- **pixelate** — block-average of $b \times b$ neighborhoods (box filter then downsample).
+- **chromatic_aberration** — per-channel horizontal offset, simulating lens dispersion.
+- **palette_remap** — map each pixel's luminance $L$ through a gradient: $\text{color} = \text{grad}(L)$.
+- **posterize/solarize/cel-shade** — quantize channels to $N$ levels: $\lfloor c \cdot N \rfloor / N$ (or clamp at a threshold).
+- **scanlines/vignette** — geometric attenuation: multiply brightness by $\sin$-based row factor, or radial falloff from the screen center.
+
+---
+
+## 30. Biome Classification — `spore_engine/gen/biome_terrain.py`
+
+Three noise channels ($\text{elevation}$, $\text{moisture}$, $\text{temperature}$) are classified into one of 12 biomes by threshold ranges:
+
+$$
+\text{biome} = f(\text{elevation},\; \text{moisture},\; \text{temperature})
+$$
+
+- Low elevation (below sea level) ⇒ **ocean**.
+- Near sea level with **beach** transition band ⇒ **beach**.
+- Temperature is modulated by elevation via a lapse rate: $\text{temp} = \text{temp} - k \cdot \text{elevation}$.
+- Arid regions (low moisture) ⇒ **desert**; cold high-elevation ⇒ **snow**/**mountain**; intermediate bands yield **grassland**, **forest**, **rainforest**, **tundra**, **taiga**, **swamp**, and **river**.
+
+Final colors are sampled from the `BIOMES` gradient based on position within the biome's elevation range.
+
+---
+
+## 31. Core Utility Math — `spore_engine/core/util.py`
+
+Small numerical helpers shared by scene-authoring code, camera smoothing, and `fx/screenfx.py`. All are pure functions; colors are downsampled via `Color(r, g, b)` integers.
+
+| Function | Definition | Use |
+|----------|-----------|-----|
+| `clamp(v, lo, hi)` | $\max(lo,\; \min(hi, v))$ | Bound a value |
+| `lerp(a, b, t)` | $a + (b - a)t$ | Linear interpolation |
+| `ir(x)` | $\lfloor x + 0.5 \rfloor$ (Python `round`) | Float → int |
+| `ramp(v, chars)` | $c_{\lfloor v \cdot (n-1)\rfloor}$ over ` .:-=+*#%@` | `0..1` → shade glyph |
+| `phase(t, speed, offset)` | $((v)\bmod 1)$ where $v = t\cdot s + o$ | Saw wave `0..1` |
+| `wave(t, speed, offset, lo, hi)` | $lo + \frac{hi-lo}{2}(1 + \sin(v))$ | Smooth sine between `lo`/`hi` |
+| `osc(t, period, offset, lo, hi)` | same as `wave` with $speed = \frac{2\pi}{period}$ | Sine by period (s) |
+| `bounce(t, period, offset, lo, hi)` | $lo + (hi{-}lo)\big(1 - \|2\cdot\text{frac}{\frac{t}{p}} - 1\|\big)$ | Triangle wave |
+| `approach(v, t, step)` | step toward `t` without overshoot | Eased setpoint |
+| `move_toward(v, t, step)` | alias of `approach` | Same |
+| `in_bounds(x, y, w, h)` | $0 \le x < w$ and $0 \le y < h$ | Cell bounds check |
+| `dist(ax, ay, bx, by)` | $\sqrt{(ax-bx)^2 + (ay-by)^2}$ | Euclidean distance |
+| `lerp_color(c1, c2, t)` | per-channel `int(lerp)`; `None` propagates the other color | Channel-blend colors |
+| `smoothstep(t)` | $t^2(3 - 2t)$ | Hermite easing `0→1` |
+| `ramp_color(t, *colors)` | sample across $n$ stops: $i = \lfloor t(n-1)\rfloor$, blend `colors[i]→colors[i+1]` | Multi-stop color gradient |
+
+`wave`/`osc`/`bounce`/`phase` default to `lo=0, hi=1` (except `phase`, which is
+a pure `0..1` repeat). `lerp_color` treats a `None` endpoint as "keep the other
+side", so it is safe to pass placeholder colors.
+
+Related simple-color helpers live in `core/color.py` (`Color.lerp`, `Color.mul`,
+`Gradient.at`); `ramp_color` is the t-parameterized multi-stop variant used when
+a single `Gradient` object is overkill.

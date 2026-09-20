@@ -1,14 +1,14 @@
 import math
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, Sphere
+from spore_engine.render3d.raytracer import RayScene, Sphere
 
 
 _scene = None
 def scene_raytracer_nebula(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(10, 8, 20)
         _scene.bg_color = Color(3, 3, 10)
         colors = [

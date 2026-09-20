@@ -1,14 +1,14 @@
 import math
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, Sphere
+from spore_engine.render3d.raytracer import RayScene, Sphere
 
 
 _scene = None
 def scene_raytracer_system(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(5, 5, 15)
         _scene.bg_color = Color(2, 2, 8)
         _scene.objects.append(Sphere(0, 0, 0, 1.2, Color(255, 200, 80), reflect=0.1, emissive=1.0))

@@ -45,20 +45,23 @@ class Particle:
         self.y += self.vy * dt
         self.life -= dt
 
-    def render(self, canvas: Canvas, z: float = 0):
+    def render(self, canvas: Canvas, z: float = 0, dx: float = 0, dy: float = 0):
         if self.dead:
             return
         a = self.alpha
         ci = min(len(_SHADE)-1, int(a * 9))
         col = self.start_color.mul(a)
-        sx, sy = round(self.x), round(self.y)
-        canvas.set_pixel(sx, sy, _SHADE[ci], col, z=z)
-        
+        sx, sy = round(self.x + dx), round(self.y + dy)
+        if 0 <= sx < canvas.width and 0 <= sy < canvas.height:
+            canvas.set_pixel(sx, sy, _SHADE[ci], col, z=z)
+
         # Render trail with fading
         for i, (tx, ty) in enumerate(self.trail):
             ta = a * (i / len(self.trail)) * 0.4
             if ta > 0.02:
-                canvas.set_pixel(round(tx), round(ty), '.', self.start_color.mul(ta), z=z)
+                tx, ty = round(tx + dx), round(ty + dy)
+                if 0 <= tx < canvas.width and 0 <= ty < canvas.height:
+                    canvas.set_pixel(tx, ty, '.', self.start_color.mul(ta), z=z)
 
 
 class Emitter:
@@ -96,9 +99,9 @@ class Emitter:
         for p in self.particles:
             p.update(dt)
 
-    def render(self, canvas: Canvas, z: float = 0):
+    def render(self, canvas: Canvas, z: float = 0, dx: float = 0, dy: float = 0):
         for p in self.particles:
-            p.render(canvas, z)
+            p.render(canvas, z, dx, dy)
 
 
 class FountainEmitter(Emitter):
@@ -285,9 +288,9 @@ class Burst:
         self.particles = [p for p in self.particles if not p.dead]
         self.alive = bool(self.particles)
 
-    def render(self, canvas: Canvas):
+    def render(self, canvas: Canvas, dx: float = 0, dy: float = 0, z: float = 0):
         for p in self.particles:
-            p.render(canvas)
+            p.render(canvas, z, dx, dy)
 
 
 class ParticleSystem:
@@ -306,13 +309,14 @@ class ParticleSystem:
         for b in self.bursts:
             b.update(dt)
 
-    def render(self, canvas: Canvas):
+    def render(self, canvas: Canvas, dx: float = 0, dy: float = 0, z: float = 0):
         for b in self.bursts:
-            b.render(canvas)
+            b.render(canvas, dx, dy, z)
 
-    def update_and_render(self, canvas: Canvas, dt: float):
+    def update_and_render(self, canvas: Canvas, dt: float,
+                          dx: float = 0, dy: float = 0, z: float = 0):
         self.update(dt)
-        self.render(canvas)
+        self.render(canvas, dx, dy, z)
 
 
 def starfield(canvas: Canvas, t: float, stars: list[list[float]],

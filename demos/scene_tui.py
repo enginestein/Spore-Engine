@@ -122,7 +122,7 @@ def scene_tui_demo(c, hr, t, pt, dt):
         )
 
         name_input = _wm.add(
-            Input(
+            TextField(
                 44, 15, 16, 'Filter:', '',
                 callback=lambda t: _on_click(f'Filter: {t}'),
             ), focusable=True,

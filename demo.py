@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-import sys, time, os, select, tty, termios, random
+import sys, time, os, random
 import demos as _demos
-from spore_engine import Canvas, HiResCanvas, ParticleSystem, Color, DIM, WHITE
+from spore_engine import (Canvas, HiResCanvas, ParticleSystem, Color, DIM,
+                          WHITE, Input, KeyEvent)
 from spore_engine.fx.transitions import Fade, Wipe, Slide, Checkerboard, PixelDissolve
 from demos import SCENES
 
@@ -36,16 +37,15 @@ def main():
     ]
 
     is_tty = sys.stdin.isatty() and sys.stdout.isatty()
-    old = None
+    inp = Input(0)
     if is_tty:
-        old = termios.tcgetattr(sys.stdin)
-        tty.setraw(sys.stdin)
+        inp.enter_raw()
 
     try:
         if is_tty:
             print('\033[?25l\033[2J', end='', flush=True)
         else:
-            print("=== Spore Engine — 99-Scene Demo ===", file=sys.stderr)
+            print(f"=== Spore Engine — {len(SCENES)}-Scene Demo ===", file=sys.stderr)
 
         while running:
             now = time.time()
@@ -86,9 +86,11 @@ def main():
             if is_tty:
                 _demos.KEY_PRESSED = None
 
-                if select.select([sys.stdin], [], [], 0.033)[0]:
-                    old_si = si
-                    ch = sys.stdin.read(1)
+                old_si = si
+                for ev in inp.events(0.033):
+                    if not isinstance(ev, KeyEvent) or not ev.down:
+                        continue
+                    ch = ev.key
 
                     if ch == 'q':
                         running = False
@@ -102,26 +104,10 @@ def main():
                     elif ch == 'p':
                         si = (si - 1) % len(SCENES)
 
-                    elif ch == '\x1b':
-                        c2 = sys.stdin.read(1) if select.select([sys.stdin], [], [], 0.05)[0] else ''
-                        c3 = sys.stdin.read(1) if select.select([sys.stdin], [], [], 0.05)[0] else ''
-
-                        if c2 == '[':
-                            if c3 == 'A':
-                                _demos.KEY_PRESSED = 'up'
-                            elif c3 == 'B':
-                                _demos.KEY_PRESSED = 'down'
-                            elif c3 == 'C':
-                                _demos.KEY_PRESSED = 'right'
-                            elif c3 == 'D':
-                                _demos.KEY_PRESSED = 'left'
-                            elif c3:
-                                _demos.KEY_PRESSED = 'alt'
-
                     else:
                         _demos.KEY_PRESSED = ch
 
-                    if si != old_si:
+                if si != old_si:
                         prev_c = c.copy()
                         transition_obj = random.choice(transitions)
                         transition_start = time.time()
@@ -142,8 +128,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        if old:
-            termios.tcsetattr(sys.stdin, termios.TCSANOW, old)
+        inp.exit_raw()
         print('\033[?25h\033[0m', end='', flush=True)
         print(f'\nSpore Engine demo ended. {len(SCENES)} scenes total.')
 

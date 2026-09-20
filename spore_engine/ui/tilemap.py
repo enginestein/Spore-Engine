@@ -61,7 +61,7 @@ class TileMap:
                     canvas.set_pixel(tx, ty, ch, col, z=z)
 
 
-# ── AUTO-TILING ───────────────────────────────────────────────────
+# -- AUTO-TILING ---------------------------------------------------
 
 AUTO_TILE_LOOKUP = {}
 
@@ -90,7 +90,7 @@ def auto_tile_char(tilemap: TileMap, x: int, y: int, wall_id: int) -> str:
     return AUTO_TILE_LOOKUP.get((n, e, s, w), '#')
 
 
-# ── PROCEDURAL MAP GENERATORS ─────────────────────────────────────
+# -- PROCEDURAL MAP GENERATORS -------------------------------------
 
 def generate_platformer(w: int, h: int, seed: int = 0) -> TileMap:
     rng = random.Random(seed)
@@ -152,7 +152,7 @@ def generate_cave(w: int, h: int, seed: int = 0, fill_prob: float = 0.45,
     return tm
 
 
-# ── SIMPLE COLLISION ──────────────────────────────────────────────
+# -- SIMPLE COLLISION ----------------------------------------------
 
 def tile_collide(tilemap: TileMap, x: float, y: float,
                  radius: float = 0.4) -> bool:
@@ -167,9 +167,9 @@ def tile_collide(tilemap: TileMap, x: float, y: float,
     return False
 
 
-# ── CAMERA ─────────────────────────────────────────────────────────
+# -- CAMERA ---------------------------------------------------------
 
-class Camera:
+class TileCamera:
     def __init__(self, x: float = 0, y: float = 0, width: int = 80, height: int = 24):
         self.x = x
         self.y = y

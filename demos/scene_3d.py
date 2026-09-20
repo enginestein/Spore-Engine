@@ -2,7 +2,7 @@ import math, random
 from spore_engine import *
 from spore_engine.core.color import *
 from spore_engine.render3d.engine3d import Mesh3D, render_mesh_solid
-from spore_engine.render3d.raytracer import Scene, Sphere, Plane
+from spore_engine.render3d.raytracer import RayScene, Sphere, Plane
 
 SHADE = ' .:-=+*#%@'
 
@@ -208,7 +208,7 @@ _rt_scene = None
 def scene_raytracer(c, hr, t, pt, dt):
     global _rt_scene
     if _rt_scene is None:
-        _rt_scene = Scene()
+        _rt_scene = RayScene()
         _rt_scene.objects.append(Sphere(-1.5,-0.3,4,1.0,Color(255,80,80),reflect=0.3))
         _rt_scene.objects.append(Sphere(1.5,0.2,4.5,0.8,Color(80,80,255),reflect=0.5))
         _rt_scene.objects.append(Sphere(0,-0.8,3,0.5,Color(80,255,80)))

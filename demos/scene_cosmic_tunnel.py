@@ -5,7 +5,7 @@ from spore_engine.render3d.sdf import *
 from spore_engine.core.geom import Vec3
 
 
-# Precomputed state — avoids recomputing ring/star trig inside SDF callbacks (huge perf win)
+# Precomputed state - avoids recomputing ring/star trig inside SDF callbacks (huge perf win)
 _cosmic_state = {
     'rings': [],  # list of (x, y, z, major_r) per ring
     'stars': [],  # list of (x, y, z) per star
@@ -14,7 +14,7 @@ _cosmic_state = {
 
 
 def scene_cosmic_tunnel(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
-    """Cosmic Tunnel — Psychedelic ray marched tunnel through space with warp drive effect"""
+    """Cosmic Tunnel - Psychedelic ray marched tunnel through space with warp drive effect"""
     global _cosmic_state
     cz = t * 0.6  # tunnel progress
 
@@ -49,7 +49,7 @@ def scene_cosmic_tunnel(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     _g_scene.max_dist = 35
     _g_scene.bg_color = Color(2, 1, 10)
 
-    # SDF functions reference precomputed arrays — no trig inside callbacks
+    # SDF functions reference precomputed arrays - no trig inside callbacks
     def tunnel(p):
         radius = math.hypot(p.x, p.z)
         d = radius - 2.5

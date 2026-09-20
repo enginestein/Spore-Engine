@@ -5,7 +5,7 @@ from spore_engine.render3d.engine3d import Mesh3D, render_mesh_solid
 
 
 def scene_neon_cathedral(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
-    """Neon Cathedral — 3D rendered geometric cathedral with pulsing neon lights and floating orbs"""
+    """Neon Cathedral - 3D rendered geometric cathedral with pulsing neon lights and floating orbs"""
     # Dramatic gradient background
     grad = Gradient(Color(3, 2, 15), Color(10, 5, 35), Color(18, 10, 50), Color(25, 12, 40))
     for y in range(c.h):
@@ -17,7 +17,7 @@ def scene_neon_cathedral(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     arch_w, arch_h, arch_d = 3.0, 3.5, 2.0
     meshes = []
 
-    # Floor — scale a unit cube
+    # Floor - scale a unit cube
     floor = Mesh3D.cube(1).transform(
         Mat4.scale(arch_w * 2 + 1, 0.1, arch_d * 2 + 2) *
         Mat4.translate(0, -1.5, 0)
@@ -45,7 +45,7 @@ def scene_neon_cathedral(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     )
     meshes.append(bw)
 
-    # Ceiling vaults — a row of torus arches
+    # Ceiling vaults - a row of torus arches
     for i in range(-3, 4):
         arch_mesh = Mesh3D.torus(1.8, 0.08, 12, 6)
         arch_mesh = arch_mesh.transform(
@@ -55,7 +55,7 @@ def scene_neon_cathedral(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
         )
         meshes.append(arch_mesh)
 
-    # Pillars — row of columns using stacked torus rings
+    # Pillars - row of columns using stacked torus rings
     for i in range(-3, 4):
         for side in [-1, 1]:
             pillar = Mesh3D.torus(0.12, 0.04, 8, 6)
@@ -66,7 +66,7 @@ def scene_neon_cathedral(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
             )
             meshes.append(pillar)
 
-    # Central altar — floating icosahedron
+    # Central altar - floating icosahedron
     altar = Mesh3D.icosphere(0.6, 2)
     altar = altar.transform(
         Mat4.translate(0, -0.5 + 0.2 * math.sin(t * 0.3), -1.0) *

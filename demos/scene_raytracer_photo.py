@@ -1,7 +1,7 @@
 import math, os
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, TexturedQuad
+from spore_engine.render3d.raytracer import RayScene, TexturedQuad
 
 
 _scene = None
@@ -11,7 +11,7 @@ _custom_path = os.path.join(os.path.dirname(__file__), 'image.jpg')
 def scene_raytracer_photo(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(25, 20, 35)
         _scene.bg_color = Color(5, 5, 18)
         path = _custom_path if os.path.isfile(_custom_path) else None

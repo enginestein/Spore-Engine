@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Shader Sandbox — Interactive ASCII Shader Playground
+Shader Sandbox - Interactive ASCII Shader Playground
 ====================================================
 A TUI sandbox for the Spore Engine's modular shader pipeline.
 Browse source effects, build shader chains, tweak params live.
@@ -32,9 +32,9 @@ from spore_engine.sim.cellular import ReactionDiffusion
 from spore_engine.gen.fractals import Mandelbrot, BurningShip
 from spore_engine.gen.fractals import NewtonFractal, BarnsleyFern
 
-# ═══════════════════════════════════════════════════════════════════
-# SHADER REGISTRY — metadata for auto-generated controls
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# SHADER REGISTRY - metadata for auto-generated controls
+# -------------------------------------------------------------------
 
 class ParamDef:
     def __init__(self, name: str, key: str, vmin: float, vmax: float,
@@ -135,9 +135,9 @@ SHADER_REGISTRY: list[ShaderDef] = [
     ]),
 ]
 
-# ═══════════════════════════════════════════════════════════════════
-# SOURCE EFFECTS — draw the base content that shaders transform
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# SOURCE EFFECTS - draw the base content that shaders transform
+# -------------------------------------------------------------------
 
 class SourceState:
     """Per-source persistent state."""
@@ -277,9 +277,9 @@ SOURCES: list[tuple[str, Callable]] = [
     ("Test Scene", src_test_scene),
 ]
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # UI CONSTANTS
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 COL_BG = Color(10, 10, 22)
 COL_PANEL_BG = Color(16, 16, 34)
@@ -303,9 +303,9 @@ SECTION_NAMES = ["Source", "Shaders", "Params", "Legend"]
 MIN_TERM_W = 90
 MIN_TERM_H = 24
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # UI DRAWING HELPERS
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 def draw_slider(c: Canvas, x: int, y: int, width: int, value: float,
                 label: str = "", focused: bool = False):
@@ -343,9 +343,9 @@ def draw_section_header(c: Canvas, x: int, y: int, w: int, text: str):
             c.set_pixel(i, y, '═', COL_BORDER)
 
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # SANDBOX STATE
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 class PipelineEntry:
     def __init__(self, def_idx: int, instance: Shader):
@@ -420,12 +420,12 @@ class ShaderSandbox:
         pw, cw = self.preview_rect()[2], self.controls_width()
         has_controls = cw >= 30 and self.term_w >= MIN_TERM_W
 
-        # ── Background ──────────────────────────────────────────
+        # -- Background ------------------------------------------
         for y in range(c.h):
             for x in range(c.w):
                 c.set_pixel(x, y, ' ', bg=COL_BG)
 
-        # ── Preview ─────────────────────────────────────────────
+        # -- Preview ---------------------------------------------
         pw = min(pw, c.w - (cw + 2 if has_controls else 0))
         ph = c.h - 1
 
@@ -452,18 +452,18 @@ class ShaderSandbox:
                 if y < c.h:
                     c.set_pixel(px, y, '│', COL_BORDER, z=2)
 
-        # ── Controls Panel ───────────────────────────────────────
+        # -- Controls Panel ---------------------------------------
         if has_controls:
             self._draw_controls(c, pw + 2, 0, cw, t)
 
-        # ── Status Bar ──────────────────────────────────────────
+        # -- Status Bar ------------------------------------------
         self._draw_status_bar(c, t, dt)
 
     def _draw_controls(self, c: Canvas, ox: int, oy: int, cw: int, t: float):
         y = oy + 1
         max_y = c.h - 2
 
-        # ── Title ───────────────────────────────────────────────
+        # -- Title -----------------------------------------------
         title = " Shader Sandbox "
         for i, ch in enumerate(title):
             px = ox + 2 + i
@@ -472,7 +472,7 @@ class ShaderSandbox:
         y += 2
         if y >= max_y: return
 
-        # ── Source Section ──────────────────────────────────────
+        # -- Source Section --------------------------------------
         sec_focused = (self.section == 0)
         draw_section_header(c, ox, y, cw, "SOURCE")
         y += 1
@@ -484,7 +484,7 @@ class ShaderSandbox:
         y += 2
         if y >= max_y: return
 
-        # ── Shaders Section ─────────────────────────────────────
+        # -- Shaders Section -------------------------------------
         sec_focused = (self.section == 1)
         draw_section_header(c, ox, y, cw, "SHADERS")
         y += 1
@@ -516,7 +516,7 @@ class ShaderSandbox:
 
         if y >= max_y: return
 
-        # ── Params Section ──────────────────────────────────────
+        # -- Params Section --------------------------------------
         sec_focused = (self.section == 2)
         focused_entry = None
         if self.section == 2 and self.pipeline:
@@ -549,7 +549,7 @@ class ShaderSandbox:
         y += 1
         if y >= max_y: return
 
-        # ── Legend / Keys ────────────────────────────────────────
+        # -- Legend / Keys ----------------------------------------
         sec_focused = (self.section == 3)
         draw_section_header(c, ox, y, cw, "KEYS")
         y += 1
@@ -585,7 +585,7 @@ class ShaderSandbox:
         c.draw_text(c.w - len(section_name) - 4, y, f"[{section_name}]", COL_ACCENT, z=2)
 
     def handle_key(self, key: str):
-        # ── Global keys ──────────────────────────────────────────
+        # -- Global keys ------------------------------------------
         if key in ('q', 'escape'):
             self.running = False
             return
@@ -610,7 +610,7 @@ class ShaderSandbox:
             self.focus_idx = 0
             return
 
-        # ── Section-specific keys ────────────────────────────────
+        # -- Section-specific keys --------------------------------
         if self.section == 0:
             self._handle_source_keys(key)
         elif self.section == 1:
@@ -689,7 +689,7 @@ class ShaderSandbox:
         used_indices = {e.def_idx for e in self.pipeline}
         available = [i for i in range(len(SHADER_REGISTRY)) if i not in used_indices]
         if not available:
-            # All shaders already in pipeline — just add first one
+            # All shaders already in pipeline - just add first one
             available = list(range(len(SHADER_REGISTRY)))
         if available:
             idx = available[0]
@@ -698,9 +698,9 @@ class ShaderSandbox:
             self.focus_idx = len(self.pipeline) - 1
 
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # TERMINAL HELPERS
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 _KEYS = {
     '\x1b[A': 'up', '\x1b[B': 'down', '\x1b[C': 'right', '\x1b[D': 'left',
@@ -741,12 +741,12 @@ def _get_term_size():
         return (100, 30)
 
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # MAIN
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 def main():
-    # ── Check terminal size ────────────────────────────────────
+    # -- Check terminal size ------------------------------------
     tw, th = _get_term_size()
     if tw < MIN_TERM_W or th < MIN_TERM_H:
         print(f"Terminal too small ({tw}x{th}). Need at least {MIN_TERM_W}x{MIN_TERM_H}.")
@@ -756,7 +756,7 @@ def main():
     sandbox = ShaderSandbox()
     sandbox.term_w, sandbox.term_h = tw, th
 
-    # ── Setup raw terminal ──────────────────────────────────────
+    # -- Setup raw terminal --------------------------------------
     if not sys.stdin.isatty():
         print("Need a real terminal. Run this interactively.")
         sys.exit(1)
@@ -773,10 +773,10 @@ def main():
         sys.stdout.write('\033[?25l\033[2J')
         sys.stdout.flush()
 
-        # ── Add initial shaders ─────────────────────────────────
+        # -- Add initial shaders ---------------------------------
         sandbox.add_shader(0)  # Wave Distort
 
-        # ── Main Loop ───────────────────────────────────────────
+        # -- Main Loop -------------------------------------------
         last_frame = time.time()
         render_count = 0
         while sandbox.running:

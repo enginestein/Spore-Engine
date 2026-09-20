@@ -1,6 +1,6 @@
 """Convert images/videos to plain ASCII text (no ANSI escape codes).
 
-Output is pure copyable text — suitable for paste into any text document.
+Output is pure copyable text - suitable for paste into any text document.
 """
 from __future__ import annotations
 import math, os, time, subprocess

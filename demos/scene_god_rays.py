@@ -5,7 +5,7 @@ from spore_engine.core.geom import Vec3
 from spore_engine.sim.noise import PerlinNoise
 
 
-# ─── Cloud generation state ───
+# --- Cloud generation state ---
 _SCENE = None
 
 def _cloud_density(p: Vec3, noise: PerlinNoise, t: float) -> float:
@@ -89,7 +89,7 @@ def _raymarch_clouds(
         # How much light gets through this sample (absorption)
         sample_trans = math.exp(-dens * 1.5 * step_size)
 
-        # Sun in-scattering (god ray) — march toward sun to compute shadow
+        # Sun in-scattering (god ray) - march toward sun to compute shadow
         sun_occ = 1.0
         sp = p
         for j in range(light_steps):
@@ -164,7 +164,7 @@ def _render_ground(canvas: Canvas, t: float, noise: PerlinNoise):
 
 
 def scene_god_rays(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
-    """God Rays — Realistic volumetric light shafts piercing through cloud layers"""
+    """God Rays - Realistic volumetric light shafts piercing through cloud layers"""
     global _SCENE
     w, h = c.w, c.h
 

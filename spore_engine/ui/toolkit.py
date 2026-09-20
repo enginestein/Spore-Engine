@@ -3,12 +3,12 @@ import sys, tty, termios, select, os, signal, time, math
 from typing import Optional, Callable
 from ..core.color import Color, WHITE, DIM, BLACK
 from ..core.canvas import Canvas
-from .widgets import Widget, WidgetManager, Frame, Label, Button, Input, Checkbox
+from .widgets import Widget, WidgetManager, Frame, Label, Button, TextField, Checkbox
 
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # TERMINAL EVENT LOOP
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 _defs = None
 
@@ -338,9 +338,9 @@ class TerminalApp:
             self.manager.handle_event('key_down', key)
 
 
-# ═══════════════════════════════════════════════════════════════════
-# FORM — layout container with labelled fields
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# FORM - layout container with labelled fields
+# -------------------------------------------------------------------
 
 class Form(Widget):
     def __init__(self, x: int, y: int, width: int = 40,
@@ -365,7 +365,7 @@ class Form(Widget):
         widget.x = field_x
         widget.y = self._field_y
         self.values[label] = ''
-        if isinstance(widget, Input):
+        if isinstance(widget, TextField):
             widget.callback = lambda t, l=label: self._set_value(l, t)
         elif isinstance(widget, Checkbox):
             widget.callback = lambda v, l=label: self._set_value(l, v)
@@ -419,9 +419,9 @@ class Form(Widget):
             canvas.set_pixel(cancel_x + i, btn_y, ch, DIM, z=z + 2)
 
 
-# ═══════════════════════════════════════════════════════════════════
-# DIALOG — modal overlay
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# DIALOG - modal overlay
+# -------------------------------------------------------------------
 
 class Dialog(Widget):
     def __init__(self, x: int, y: int, width: int = 40, height: int = 10,

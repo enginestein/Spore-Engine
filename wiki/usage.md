@@ -6,12 +6,7 @@ Comprehensive guide to using the Spore Engine.
 
 ## Installation
 
-```bash
-git clone <repo> ~/ascii-engine
-cd ~/ascii-engine
-```
-
-No pip install required. Just import `spore_engine` from the project root.
+Clone the repo.
 
 **Optional dependencies for media features:**
 ```bash
@@ -26,7 +21,7 @@ sudo apt install ffmpeg         # Video conversion (or brew install ffmpeg)
 A high-level layer for quickly making sprite-based graphics, animations, and simple apps — no manual tween math or boilerplate required.
 
 ```python
-from spore_engine.easy import App, Sprite
+from spore_engine.easy import App, GameSprite
 ```
 
 ### App
@@ -39,11 +34,35 @@ app.run()                        # Start main loop (q to quit)
 
 # Add sprites
 s = app.sprite(""" @ \n/@\\""", x=10, y=5, fg=(255, 200, 100))
+coin = app.sprite('●', 40, 10, fg=(255, 220, 80), z=12, hires=True)  # hi-res
 
 # Add one-off text
 app.text("Hello!", 2, 1, fg=(255, 255, 255))
 
-# Input
+# Backgrounds
+app.bg(Color(20, 20, 40))                      # Flat
+app.bg_gradient(Color(8, 10, 28), Color(60, 34, 96))   # Vertical gradient
+app.bg_art(beatle, scroll_x=2.0)               # Tiling ASCII art
+
+# World camera (follows a target, clamps to world bounds)
+app.camera = Camera(w, h, x=0, y=0, world_w=160, world_h=60)
+app.camera.follow(player_x, player_y, dt=dt)
+
+# Full-screen effects (shake / flash / fade)
+app.add_shake(2.0,          duration=0.5)
+app.add_flash(0.2,          duration=0.3)
+app.add_fade(Color(0,0,0),  duration=1.0)      # wipe to/from black
+
+# Scene transitions (from spore_engine.fx.transitions import Fade, Wipe, ...)
+app.transition_to(Fade(), duration=0.5)
+
+# Input — arrow keys are decoded to 'up'/'down'/'left'/'right'.
+# Holds are tracked from the terminal's key auto-repeat; a held key that
+# the terminal never repeats degrades to a press + synthesized release.
+@app.on_key('left')
+def go_left(app):
+    app.state['vx'] = -9.0
+
 @app.on_key('n')
 def on_n(app):
     print('pressed n')
@@ -57,30 +76,44 @@ def tick(app, dt):
     pass                          # Every frame
 ```
 
-### Sprite
+Keys reach handlers as decoded names: `'left'`, `'right'`, `'up'`, `'down'`,
+`'space'`, `'enter'`, `'tab'`, `'backspace'`, `'delete'`, `'home'`, `'end'`,
+`'pageup'`, `'pagedown'`, `'escape'`, `'shift-tab'`, `'F1'`–`'F12'`,
+`'ctrl-c'`/`'ctrl-d'`/`'ctrl-z'`, printable chars, and any UTF-8 glyph.
+
+The full working example lives in `demos/scene_platformer.py` (camera follow,
+arrow-key platformer physics, hi-res coins, shake/flash): run it with
+```bash
+python3 -m demos.scene_platformer        # ◄ ► move, SPACE jump, Q quit
+```
+It also registers in `demo.py`'s scene list as **"Moon Platformer"**, where its
+`scene_platformer(c, hr, t, pt, dt)` wrapper renders the same App pipeline into
+the normal scene harness.
+
+### GameSprite
 
 Create from multi-line ASCII art strings.
 
 ```python
 # From art string
-bird = Sprite("""
+bird = GameSprite("""
   @
- /@\\
+  /@\\
 /   \\
 """, x=20, y=5, fg=(255, 200, 100))
 
 # Programmatic
-box = Sprite("", x=10, y=10)
+box = GameSprite("", x=10, y=10)
 box.set_pixel(0, 0, '┌')
 box.set_pixel(0, 0, '┐')
 
 # Factory methods
-Sprite.rect(10, 5, char='#', fg=(255, 0, 0))     # Rectangle
-Sprite.circle(5, char='*', fg=(0, 255, 0))        # Circle
-Sprite.from_file('art.txt')                        # From file
+GameSprite.rect(10, 5, char='#', fg=(255, 0, 0))     # Rectangle
+GameSprite.circle(5, char='*', fg=(0, 255, 0))        # Circle
+GameSprite.from_file('art.txt')                        # From file
 ```
 
-### Sprite Methods
+### GameSprite Methods
 
 ```python
 # Movement
@@ -110,7 +143,7 @@ s.set_pixel(dx, dy, char='#', fg=None, bg=None)  # Set cell
 s.draw_text(dx, dy, text, fg=None)                # Draw text on sprite
 
 # Utilities
-s.copy() -> Sprite             # Deep copy
+s.copy() -> GameSprite        # Deep copy
 s.contains(px, py) -> bool     # Hit test
 ```
 
@@ -119,7 +152,7 @@ s.contains(px, py) -> bool     # Hit test
 Fluent chaining — no tweens or math required.
 
 ```python
-s = Sprite(' @ ', x=0, y=5)
+s = GameSprite(' @ ', x=0, y=5)
 
 # Move with easing
 s.move_to(50, 10).over(2).ease('bounce_out')
@@ -164,19 +197,18 @@ python3 easy_demo.py             # q to quit, n to change spinner
 ## Running the Demo
 
 ```bash
-python3 demo.py                  # Original 127+ scene demo
+python3 demo.py                  # All 134 registered scenes (n/p/space/q)
 ```
 
 ### Controls (interactive terminal mode)
 
 | Key | Action |
 |-----|--------|
-| `n` / `→` | Next scene |
-| `p` / `←` | Previous scene |
+| `n` | Next scene |
+| `p` | Previous scene |
 | `Space` | Toggle pause |
 | `q` | Quit |
-| `↑` | Send "up" to scene |
-| `↓` | Send "down" to scene |
+| `↑` / `↓` / `←` / `→` | Sent to active scene via `KEY_PRESSED` |
 | Any other key | Passed to active scene via `KEY_PRESSED` |
 
 ### Non-TTY mode
@@ -187,6 +219,24 @@ python3 demo.py | less -R
 
 ---
 
+
+## Testing
+
+```bash
+python3 -m pytest tests/ -q
+```
+
+The `tests/` suite (pytest, no extra deps) covers both surfaces' full
+primitive API (including shared `DrawMixin` behavior), z-order and deep-empty
+clears, text anchors, `fill_sky`/gradient fills, `to_canvas` preserve/blank
+semantics, `SceneState`, `Camera` viewport math, `Input` escape decoding plus
+the pull-based event model (synthesized releases, repeat grace, resize events,
+SGR/X10 mouse and wheel), `KeyState` edges, `ScreenFX` timing,
+`Scene`/`Layer` compositing, the package-wide "one namespace, one true
+version" invariant (`test_api.py`), and a headless run of the `easy.App` Moon
+Platformer demo. Run it before and after touching the engine.
+
+---
 
 ### Programmatic usage
 
@@ -217,28 +267,52 @@ from spore_engine import Canvas, HiResCanvas, Color, Vec2, Mat4
 c = Canvas(80, 24)           # Create framebuffer
 hr = HiResCanvas(80, 48)     # Double-resolution buffer
 
-# Drawing
+# Drawing — Canvas and HiResCanvas share one primitive set (core.DrawMixin)
 c.set_pixel(x, y, '@', Color(255, 0, 0))           # Single pixel
 c.draw_line(x1, y1, x2, y2, '#', Color(0, 255, 0)) # Line
+c.draw_line_thick(0, 0, 40, 20, thickness=3, fg=WHITE)
 c.draw_circle(cx, cy, r, '*', Color(0, 0, 255))     # Circle
 c.draw_rect(x, y, w, h, '#', Color(255, 255, 0))   # Rectangle
 c.draw_triangle(x1, y1, x2, y2, x3, y3, '@', Color(255,0,0), fill=True)
 c.draw_ellipse(cx, cy, rx, ry, '#', Color(255,0,0))
 c.draw_bezier([(0,0), (40,20), (80,0)], 30, '@', Color(255,128,0))
+c.draw_arc(cx, cy, r, start_angle=0, end_angle=1.5, char='.', fg=WHITE)
+c.draw_polygon([(0,0),(10,2),(8,8),(2,6)], '#', Color(255,255,0), fill=True)
+c.draw_ray(x1, y1, x2, y2, '#', Color(255,128,0))  # Fractional segment
 c.draw_text(x, y, "Hello!", Color(255, 255, 255))  # Text
+
+# Anchored / centered text (bounds-safe)
+c.draw_text_at(2, 1, "topleft", Color(255,255,255), anchor='nw')
+c.draw_text_at(0, 0, "right edge", Color(255,255,255), anchor='e')
+c.draw_text_centered(12, "Mid Title", Color(255, 255, 255))   # x centered
+# anchors: nw n ne | w c e | sw s se
 
 # Fill operations
 c.fill_rect(x, y, w, h, '@', Color(255, 0, 0))     # Filled rect
 c.gradient_fill(x1, y1, x2, y2, gradient)           # Gradient fill
+c.gradient_fill_radial(cx, cy, r, gradient)         # Radial gradient
 c.fill(x, y, '#')                                     # Flood fill
+c.blit_canvas(src, dx, dy, z=0)                      # Composite another canvas
+
+# Background-only fills (respect z; e.g. use a negative z behind sprites)
+grad = Gradient(Color(8, 10, 28), Color(60, 34, 96))
+c.fill_gradient_x(x, y, w, h, grad)      # Horizontal bg gradient
+c.fill_gradient_y(x, y, w, h, grad)      # Vertical bg gradient
+c.fill_sky(grad, horizon=0.5, z=-100)    # Sky: top grad 0→1, bottom held at end
 
 # Output
 c.render_to(sys.stdout)  # ANSI truecolor output
 
 # HiResCanvas
-hr.set_pixel(x, y, '@', Color(255, 0, 0))
-hr.to_canvas(c)           # Flatten to regular Canvas
+hr.set_pixel(x, y, '@', Color(255, 0, 0))           # Same primitives as Canvas
+hr.to_canvas(c)            # Flatten (half-blocks ▀▄█). Skips EMPTY cells so a
+                           # pre-drawn background survives. blank=True erases.
 ```
+
+Every draw primitive takes an optional trailing `z=` depth (default `0`).
+`Canvas` and `HiResCanvas` cells start at `z = -inf`, so negative-z fills (the
+usual way to paint skies/backgrounds under sprites) draw over a cleared canvas
+and are in turn covered by `z >= 0` foreground work.
 
 ### Color
 
@@ -260,6 +334,154 @@ bg_code = red.ansi_bg()                        # ANSI background escape
 grad = Gradient(*PALETTES['fire'])
 color = grad.at(0.5)                           # Sample at midpoint
 ```
+
+### Scene Composition (Scene / Layer)
+
+```python
+from spore_engine import Scene, Layer
+
+s = Scene(80, 24)            # Owns a Canvas + a HiResCanvas (s.hr)
+s.fill_sky(Gradient(...), z=-100)          # forwards draw calls to s.canvas
+
+hud = s.layer('hud', z=50)   # Named layered canvas
+hud.draw_text(1, 1, 'HP 10', Color(0, 255, 0), z=50)
+
+s.compose()                  # Stack hr over canvas (half-blocks)
+s.present(sys.stdout)        # render_to
+```
+
+`Scene.__getattr__` forwards any unknown attribute to `s.canvas`, so a Scene
+drops in anywhere a Canvas was expected. `s.layer('name', z=...)` returns the
+same `Layer` on repeated calls.
+
+### Scene State (persistent memory between frames / restarts)
+
+```python
+from spore_engine import scene_state, clear_scene_states
+
+st = scene_state('gravity')      # Same object every frame & scene reload
+st.tick(dt)                      # st.t += dt
+if 'bodies' not in st:           # first run
+    st.bodies = build_bodies()
+st['score'] = st.get('score', 0) + 1
+# st.get(key, default, factory=...) — factory builds on first access
+clear_scene_states()             # wipe all (e.g. when a scene restarts)
+list_scene_states()              # -> ['gravity', ...]
+```
+
+### Keyboard & Input Events (core)
+
+Pull-based terminal input with a real event model — no Enter needed, delivered
+as a stream of `KeyEvent` / `MouseEvent` / `ResizeEvent`.
+
+```python
+from spore_engine import (Input, KeyState, open_input,
+                          KeyEvent, MouseEvent, ResizeEvent, KEY_LEFT)
+
+inp = Input()                        # or open_input(0) — reads stdin
+inp.enable_mouse()                   # SGR mouse reports (buttons + wheel)
+with inp.raw():                      # tty raw mode (restores on exit)
+    ks = KeyState()
+    while running:
+        events = inp.events(1 / 30)        # one pull per frame: keys + mouse + resize
+        ks.update(events)                  # tracks holds & press/release edges
+        for ev in events:
+            if isinstance(ev, KeyEvent):
+                if ev.down and not ev.repeat and ev.key == KEY_LEFT: move_left()
+                if not ev.down and ev.key == KEY_SPACE:    jump_on_release()
+            elif isinstance(ev, MouseEvent):
+                if ev.action == 'press' and ev.button == 0:  click(ev.x, ev.y)
+                if ev.action == 'scroll':                    roll(ev.scroll_dx, ev.scroll_dy)
+            elif isinstance(ev, ResizeEvent):
+                layout(ev.width, ev.height)
+        if ks.just_pressed('q'): break
+# Non-blocking pattern:
+#   for ev in inp.events(0): ...
+```
+
+**Key events.** Terminals only report presses (and auto-repeats). The engine
+*synthesizes* a `KeyEvent(down=False)` release after `release_delay` of
+silence, so:
+
+- a held key that repeats is tracked exactly — it releases only when the
+  repeats stop, and **never depends on terminal key repeat**;
+- a repeat arriving within `repeat_grace` of a synthesized release continues
+  the hold (marked `repeat=True`, never a fresh press);
+- hold state is exposed via `KeyState` (`down` / `just_pressed` /
+  `just_released`, `update(events)` edge flags).
+
+**Mouse & resize.** `enable_mouse()` decodes SGR reports into `MouseEvent`
+(`press` / `release` / `move` / `scroll`, with `x`/`y`, modifiers, and
+`scroll_dx`/`scroll_dy` — `+1` scroll down/right). Terminal size changes arrive
+as `ResizeEvent` both from the terminal's `CSI 8;…t` report and from periodic
+size polling.
+
+**Raw mode** requires `termios` (POSIX). On non-POSIX platforms the module
+imports cleanly and `poll()`/`get()` still read already-cooked input.
+
+Low-level helpers remain available: `poll(timeout)` returns the next key
+*press* (blocking up to `timeout`, 0 = non-blocking; releases, mouse and
+resize are consumed internally), `get()` blocks, `available()` is
+non-blocking. Arrows, F-keys, Home/End, PgUp/PgDn, Delete/Insert, Shift-Tab,
+and ctrl-c/d/z decode to names.
+
+### Camera (core, world & viewport)
+
+```python
+from spore_engine import Camera, Canvas
+
+cam = Camera(view_w, view_h, x=0, y=0, zoom=1.0,
+             world_w=160, world_h=60)      # world bounds enable clamping
+sx, sy = cam.to_screen(wx, wy)             # world -> screen
+wx, wy = cam.to_world(sx, sy)              # screen -> world
+cam.follow(px, py)                         # snap
+cam.follow(px, py, dt=dt)                  # smoothed (lerp, 8/s)
+if cam.in_view(wx, wy): cam.draw(c, wx, wy, '@', fg=WHITE, z=10)
+cam.draw_line(c, x1, y1, x2, y2, '.', fg=DIM)     # draws through camera
+cam.draw_text(c, wx, wy, "hi", fg=WHITE)
+cam.clamp()                                # stays inside world bounds
+```
+
+`left`/`right`/`top`/`bottom` expose viewport edges. Works with `easy.App` via
+`app.camera = Camera(...)`.
+
+### Math & Ramp Utilities
+
+```python
+from spore_engine import clamp, lerp, ir, ramp, phase, wave, osc, bounce
+from spore_engine import in_bounds, approach, move_toward, dist
+from spore_engine import lerp_color, smoothstep, ramp_color
+
+clamp(v, 0, 1);  lerp(a, b, t);   ir(2.6)      # round to int
+ramp(0.3)                                        # 0..1 -> ' '..'@' glyph
+phase(t, speed, offset)                          # saw 0..1 repeating
+wave(t, speed, offset, lo, hi)                   # smooth sine
+osc(t, period, offset, lo, hi)                   # sine by period (s)
+bounce(t, period, offset, lo, hi)                # triangle wave
+approach(x, target, step);  move_toward(x, t, s) # eased stepping
+dist(ax, ay, bx, by);       in_bounds(x, y, w, h)
+lerp_color(c1, c2, t);      smoothstep(t)
+ramp_color(t, Color(0,0,0), Color(255,0,0), ...)  # multi-stop colour sample
+```
+
+### ScreenFX (stateful screen effects for games)
+
+```python
+from spore_engine import ScreenFX
+
+fx = ScreenFX()
+fx.add_shake(2.0, duration=0.5)    # camera-style shake
+fx.add_flash(0.2,  duration=0.3)   # white burst
+fx.add_fade(Color(0,0,0), duration=1.0, inverse=False)  # to/from black
+# per frame:
+fx.tick(dt)                        # advance/count down timers
+fx.apply(canvas, seed=int(t*100))  # after the scene renders
+fx.active                          # True while any effect is running
+```
+
+`easy.App` owns a `ScreenFX` in `app.screen_fx` (`app.fx`) and applies it each
+frame; `app.add_shake(...)` / `app.add_flash(...)` / `app.add_fade(...)` are
+shortcuts.
 
 ### Vectors & Matrices
 
@@ -301,9 +523,9 @@ render_mesh_solid(hr_canvas, mesh, view_mat, proj_mat, light_dir=Vec3(0.5, -1, -
 ### Ray Tracing
 
 ```python
-from spore_engine.render3d.raytracer import Scene, Sphere, Plane
+from spore_engine import RayScene, Sphere, Plane
 
-scene = Scene()
+scene = RayScene()
 scene.add(Sphere(0, 0, 0, 1, Color(255, 0, 0), reflectivity=0.3))
 scene.add(Plane(0, 1, 0, -1, Color(128, 128, 255), reflectivity=0.1))
 scene.add_light(Vec3(-5, 10, 5), Color(255, 255, 255), power=1.5)
@@ -645,15 +867,18 @@ palette_remap(canvas, gradient)
 
 ### Screen Effects
 
-Full-screen effects: shake, fade overlay, flash, crossfade, and color overlay.
+One-shot screen effects + the stateful `ScreenFX` manager.
 
 ```python
-from spore_engine import shake, fade_overlay, flash, crossfade, Color
+from spore_engine import shake, fade_overlay, flash, crossfade, Color, ScreenFX
 
-shake(canvas, intensity=3)
+shake(canvas, intensity=3)                    # one shot
 fade_overlay(canvas, color=Color(255, 0, 0), alpha=0.3)
 flash(canvas, alpha=0.5)
 crossfade(dst_canvas, src_canvas, alpha=0.5)
+
+fx = ScreenFX()      # timed, ticking effects — see "ScreenFX" section above
+fx.add_shake(2.0); fx.tick(dt); fx.apply(canvas)
 ```
 
 ### Scene Transitions
@@ -728,8 +953,11 @@ system.render(canvas, t)
 
 ### Terminal UI
 
+> `Input` at the top level is the *core keyboard* class. The text-input
+> widget is `TextField` (from `spore_engine.ui` or the top level).
+
 ```python
-from spore_engine import TerminalApp, Button, Label, ProgressBar, Slider, Input
+from spore_engine import TerminalApp, Button, Label, TextField, ProgressBar, Slider
 
 def my_app():
     app = TerminalApp(width=60, height=20)
@@ -742,8 +970,8 @@ def my_app():
     btn = Button(10, 5, text='Click Me', callback=on_click)
     app.add(btn, focusable=True)
     
-    slider = Slider(10, 8, value=0.5)
-    app.add(slider, focusable=True)
+    field = TextField(10, 8, width=20)
+    app.add(field, focusable=True)
     
     app.run()
 
@@ -763,7 +991,7 @@ All widgets share these properties:
 |--------|-------------|-----------|
 | `Label` | Static text | No |
 | `Button` | Clickable action button | Yes |
-| `Input` | Text input field | Yes |
+| `TextField` | Text input field | Yes |
 | `Checkbox` | Boolean toggle | Yes |
 | `RadioGroup` | Mutually exclusive options | Yes |
 | `Slider` | Value slider (0-1) | Yes |
@@ -783,11 +1011,14 @@ All widgets share these properties:
 
 Tile-based maps with scrolling camera, procedural platformer/cave generation, and auto-tiling.
 
+> `TileCamera` is the tile-map scroll camera (core `Camera` is the world
+> viewport — two distinct types, two distinct names).
+
 ```python
-from spore_engine import TileMap, Camera, generate_platformer
+from spore_engine import TileMap, TileCamera, generate_platformer
 
 tilemap = generate_platformer(80, 24, seed=42)
-cam = Camera(x=0, y=0, width=40, height=20)
+cam = TileCamera(x=0, y=0, width=40, height=20)
 cam.follow(player_x, player_y, tilemap.width, tilemap.height)
 tilemap.render(canvas, {1: ('#', (139, 90, 43))}, cam.x, cam.y)
 ```

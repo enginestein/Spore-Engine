@@ -1,5 +1,5 @@
 import math, random
-from spore_engine.ui.tilemap import TileMap, Camera, generate_platformer, tile_collide
+from spore_engine.ui.tilemap import TileMap, TileCamera, generate_platformer, tile_collide
 from spore_engine.core.color import Color, WHITE, DIM, GREEN, RED, BLUE
 
 SHADE = ' .:-=+*#%@'
@@ -26,7 +26,7 @@ def scene_tilemap(c, hr, t, pt, dt):
                 tm.set_collision(x, y, True)
         _LS = {
             'tm': tm,
-            'cam': Camera(0, 0, c.w, c.h),
+            'cam': TileCamera(0, 0, c.w, c.h),
             'px': 3.0, 'py': 15.0,
             'pvx': 0.0, 'pvy': 0.0,
             'on_ground': False,

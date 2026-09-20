@@ -2,6 +2,7 @@ from __future__ import annotations
 import math, random
 from typing import Optional
 from ..core.color import Color, BLACK, WHITE
+from ..core.util import clamp
 
 
 def shake(canvas, intensity: float = 2.0, seed: int = 0):
@@ -95,3 +96,75 @@ def scanlines(canvas, intensity: float = 0.3):
             c = canvas.buffer[y][x]
             if c.fg is not None:
                 c.fg = c.fg.mul(1 - intensity)
+
+
+class ScreenFX:
+    """Timer-driven screen effects stored per-frame.
+
+        fx = ScreenFX()
+        fx.add_shake(2.5)          # on an explosion
+        fx.add_flash(0.6)
+        ...
+        fx.tick(dt)                # decay timers each frame
+        fx.apply(canvas, seed=int(t * 100))   # after the scene renders
+    """
+
+    def __init__(self):
+        self.shake_t = 0.0
+        self.shake_p = 0.0
+        self.shake_dur = 1.1
+        self.flash_t = 0.0
+        self.flash_p = 0.0
+        self.flash_dur = 0.5
+        self.fade_t = 0.0
+        self.fade_dur = 1.0
+        self.fade_color = Color(0, 0, 0)
+        self.fade_in = False
+        self._fade_started = False
+
+    def add_shake(self, power: float, duration: float = 1.1):
+        self.shake_t = max(self.shake_t, duration)
+        self.shake_p = max(self.shake_p, min(3.5, power))
+        self.shake_dur = duration
+
+    def add_flash(self, alpha: float, duration: float = 0.5):
+        self.flash_t = max(self.flash_t, duration)
+        self.flash_p = max(self.flash_p, min(1.0, alpha))
+        self.flash_dur = duration
+
+    def add_fade(self, color: Color = BLACK, duration: float = 1.0,
+                 inverse: bool = False):
+        self.fade_dur = max(0.01, duration)
+        self.fade_t = 0.0
+        self.fade_color = color
+        self.fade_in = inverse
+        self._fade_started = True
+
+    @property
+    def active(self) -> bool:
+        return (self.shake_t > 0 or self.flash_t > 0
+                or (self._fade_started and 0 <= self.fade_t < 1))
+
+    def tick(self, dt: float):
+        if self.shake_t > 0:
+            self.shake_t -= dt
+        if self.flash_t > 0:
+            self.flash_t -= dt
+        if 0 <= self.fade_t < 1:
+            self.fade_t += dt / self.fade_dur
+
+    def apply(self, canvas, seed: int = 0, z: float = 1000):
+        if self.shake_t > 0:
+            p = self.shake_p * min(1.0, self.shake_t / self.shake_dur)
+            if p > 0.01:
+                shake(canvas, p, seed=seed)
+        if self.flash_t > 0:
+            a = self.flash_p * min(1.0, self.flash_t / self.flash_dur)
+            if a > 0.01:
+                flash(canvas, a, z=z)
+        if self.fade_dur and self._fade_started:
+            a = clamp(self.fade_t, 0.0, 1.0)
+            if self.fade_in:
+                a = 1 - a
+            if 0 < a < 1:
+                fade_overlay(canvas, a, self.fade_color, z=z)

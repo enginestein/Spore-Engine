@@ -13,7 +13,7 @@ def _draw_rich_scene(c, t):
     """Draw a beautiful animated scene for shaders to transform"""
     w, h = c.w, c.h
     
-    # 1. Background — nebula gradient
+    # 1. Background - nebula gradient
     for y in range(h):
         for x in range(w):
             nx, ny = x / w, y / h
@@ -104,7 +104,7 @@ _SHADER_CONFIGS = [
 
 
 def scene_shader_symphony(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
-    """Shader Symphony — Rich animated scene transformed by a rotating gallery of shader pipelines"""
+    """Shader Symphony - Rich animated scene transformed by a rotating gallery of shader pipelines"""
     w, h = c.w, c.h
     idx = int(t / 5) % len(_SHADER_CONFIGS)
     

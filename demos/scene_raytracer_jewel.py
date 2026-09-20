@@ -1,14 +1,14 @@
 import math
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, Sphere, Plane
+from spore_engine.render3d.raytracer import RayScene, Sphere, Plane
 
 
 _scene = None
 def scene_raytracer_jewel(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(20, 18, 30)
         _scene.objects.append(Plane(0, 1, 0, -2.2, Color(35, 30, 55), reflect=0.55))
         _scene.objects.append(Plane(0, 0, 1, 3.5, Color(40, 35, 55), reflect=0.5))
@@ -21,7 +21,7 @@ def scene_raytracer_jewel(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
             Color(255, 255, 60), Color(255, 160, 100), Color(100, 200, 255),
         ]
         for i in range(12):
-            a = i * 2.094  # 120° / 3 per layer
+            a = i * 2.094  # 120 deg / 3 per layer
             layer = i // 4
             r = 1.2 + layer * 0.5
             x = math.cos(a) * r

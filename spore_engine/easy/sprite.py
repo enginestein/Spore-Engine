@@ -4,7 +4,7 @@ from ..core.color import Color
 from ..core.canvas import Canvas
 
 
-class Sprite:
+class GameSprite:
     def __init__(self, art="", x=0, y=0, fg=None, bg=None, z=0, visible=True):
         self._x = float(x)
         self._y = float(y)
@@ -140,7 +140,7 @@ class Sprite:
         return bx <= px < bx2 and by <= py < by2
 
     def copy(self):
-        s = Sprite("", self._x, self._y, self._fg, self._bg, self._z, self._visible)
+        s = GameSprite("", self._x, self._y, self._fg, self._bg, self._z, self._visible)
         s._cells = list(self._cells)
         s._width = self._width
         s._height = self._height
@@ -272,12 +272,12 @@ class Sprite:
             canvas.set_pixel(px, py, char, fg, bg, self._z)
 
     def __repr__(self):
-        return f"Sprite({self._width}x{self._height} @ ({self._x:.0f},{self._y:.0f}))"
+        return f"GameSprite({self._width}x{self._height} @ ({self._x:.0f},{self._y:.0f}))"
 
     @staticmethod
     def rect(w, h, char='#', fg=None, bg=None):
         art = '\n'.join([char * w for _ in range(h)])
-        return Sprite(art, fg=fg, bg=bg)
+        return GameSprite(art, fg=fg, bg=bg)
 
     @staticmethod
     def circle(r, char='#', fg=None):
@@ -290,9 +290,9 @@ class Sprite:
                 else:
                     line += ' '
             art_lines.append(line)
-        return Sprite('\n'.join(art_lines), fg=fg)
+        return GameSprite('\n'.join(art_lines), fg=fg)
 
     @staticmethod
     def from_file(path):
         with open(path) as f:
-            return Sprite(f.read())
+            return GameSprite(f.read())

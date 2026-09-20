@@ -8,17 +8,17 @@ from spore_engine.core.color import Color, WHITE, RED, GREEN, CYAN, YELLOW
 
 app = App(title="Easy Spore Demo — q=quit n=new spin")
 
-# ── Create sprites from ASCII art ──────────────────────────────
+# -- Create sprites from ASCII art ------------------------------
 player = app.sprite("""
   @  
  /@\\ 
  / \\
 """, x=5, y=10, fg=Color(255, 200, 100), z=5)
 
-# ── Animate with simple method chaining ────────────────────────
+# -- Animate with simple method chaining ------------------------
 player.move_to(70, 10).over(3).ease('bounce_out')
 
-# ── More sprites with different animations ─────────────────────
+# -- More sprites with different animations ---------------------
 player2 = app.sprite("""
  .d8b. 
  8I d8 
@@ -27,7 +27,7 @@ player2 = app.sprite("""
 player2.move_to(60, 12).over(4).ease('elastic_out')
 player2.scale_to(2.0).over(2).ease('back_out')
 
-# ── Spin forever ───────────────────────────────────────────────
+# -- Spin forever -----------------------------------------------
 spinner = app.sprite("""
  /-\\ 
  |-| 
@@ -35,7 +35,7 @@ spinner = app.sprite("""
 """, x=40, y=5, fg=CYAN, z=5)
 spinner.spin(speed=0.5)
 
-# ── Pulse in size ──────────────────────────────────────────────
+# -- Pulse in size ----------------------------------------------
 pulser = app.sprite("""
  **** 
  *  * 
@@ -44,11 +44,11 @@ pulser = app.sprite("""
 """, x=10, y=5, fg=RED, z=5)
 pulser.pulse(min_scale=0.6, max_scale=1.4, period=0.8)
 
-# ── Bouncing ball (looping) ───────────────────────────────────
+# -- Bouncing ball (looping) -----------------------------------
 ball = app.sprite(" ● ", x=30, y=2, fg=YELLOW, z=5)
 ball.move_to(30, 18).over(1.0).ease('bounce_out').loop()
 
-# ── Build programmatic sprites ─────────────────────────────────
+# -- Build programmatic sprites ---------------------------------
 house = app.sprite("", x=50, y=15, fg=Color(200, 150, 100), z=3)
 house.set_pixel(0, 0, '┌')
 house.set_pixel(8, 0, '┐')
@@ -64,11 +64,11 @@ house.set_pixel(4, 1, '┴')
 house.set_pixel(4, 2, '│')
 house.set_pixel(4, 3, '│')
 
-# ── Text ────────────────────────────────────────────────────────
+# -- Text --------------------------------------------------------
 app.text("Hello Spore!", 2, 1, WHITE, z=10)
 app.text("Art Sprites + Simple Animations", 2, 2, Color(180, 180, 200), z=10)
 
-# ── Keyboard input ──────────────────────────────────────────────
+# -- Keyboard input ----------------------------------------------
 @app.on_key('n')
 def on_n(app):
     spinner.spin(speed=2.0)

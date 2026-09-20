@@ -441,9 +441,9 @@ class PhysicsWorld:
         return grid
 
 
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 # ENHANCED: Rotation, angular velocity
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
 
 class RigidBody(Body):
     def __init__(self, x: float = 0, y: float = 0, radius: float = 1,
@@ -479,9 +479,9 @@ class RigidBody(Body):
         canvas.draw_line(cx, cy, dir_x, dir_y, '@', self.color, z=z + 1)
 
 
-# ═══════════════════════════════════════════════════════════════════
-# POLYGON BODY — convex polygon with SAT collision
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# POLYGON BODY - convex polygon with SAT collision
+# -------------------------------------------------------------------
 
 class PolyBody:
     def __init__(self, vertices: list[tuple[float, float]],
@@ -757,9 +757,9 @@ def resolve_circle_aabb(circle: Body, rect: RectBody):
         rect.vel.y += n.y * j * rect.inv_mass
 
 
-# ═══════════════════════════════════════════════════════════════════
-# COMPOUND BODY — composite of multiple shapes
-# ═══════════════════════════════════════════════════════════════════
+# -------------------------------------------------------------------
+# COMPOUND BODY - composite of multiple shapes
+# -------------------------------------------------------------------
 
 class CompoundBody:
     def __init__(self, x: float = 0, y: float = 0, mass: float = 1,

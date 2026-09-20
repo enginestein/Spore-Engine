@@ -97,6 +97,21 @@ from .scene_ethereal_ruins import scene_ethereal_ruins
 from .scene_god_rays import scene_god_rays
 
 
+# Latest demos
+from .scene_crystal_cluster import scene_crystal_cluster
+from .scene_synthwave import scene_synthwave
+from .scene_fireflies import scene_fireflies
+from .scene_constellation import scene_constellation
+from .scene_platformer import scene_platformer
+
+# Newest demos
+from .scene_hypercube import scene_hypercube
+from .scene_eclipse import scene_eclipse
+from .scene_neon_city import scene_neon_city
+from .scene_geometric_flower import scene_geometric_flower
+from .scene_sierpinski import scene_sierpinski
+
+
 SCENES = [
     ("Title Screen", scene_title),
     ("Horizon Sunset", scene_horizon),
@@ -215,13 +230,25 @@ SCENES = [
     ("Photo ASCII", scene_photo_ascii),
     ("Pixel Walkers", scene_walkers),
     ("Ragdoll", scene_ragdoll),
-    # ═══════════════ Beautiful New Demos ═══════════════
+    # --------------- Beautiful New Demos ---------------
     ("SDF Dreamscape", scene_sdf_dreamscape),
     ("Prism Raytracer", scene_prism_raytracer),
     ("Neon Cathedral", scene_neon_cathedral),
     ("Cosmic Tunnel", scene_cosmic_tunnel),
     ("Shader Symphony", scene_shader_symphony),
     ("Ethereal Ruins", scene_ethereal_ruins),
-    # ═══ God Rays ═══
+    # --- God Rays ---
     ("God Rays", scene_god_rays),
+    # --------------- Latest Demos ---------------
+    ("Crystal Cluster", scene_crystal_cluster),
+    ("Synthwave", scene_synthwave),
+    ("Firefly Meadow", scene_fireflies),
+    ("Constellation", scene_constellation),
+    ("Moon Platformer", scene_platformer),
+    # --------------- Newest Demos ---------------
+    ("Hypercube", scene_hypercube),
+    ("Solar Eclipse", scene_eclipse),
+    ("Neon City", scene_neon_city),
+    ("Geometric Flower", scene_geometric_flower),
+    ("Sierpinski", scene_sierpinski),
 ]

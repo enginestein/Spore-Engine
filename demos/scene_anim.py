@@ -29,10 +29,10 @@ def scene_anim(c, hr, t, pt, dt):
         for x in range(c.w):
             c.set_pixel(x, y, ' ', bg=Color(5, 3, 15), z=-100)
 
-    # ── TAB TITLE ─────────────────────────────────────────────────
+    # -- TAB TITLE -------------------------------------------------
     c.draw_text(2, 0, "Animation Demo", Color(255, 200, 100), z=100)
 
-    # ── TWEEENS (bouncing balls, progress bars) ──────────────────
+    # -- TWEEENS (bouncing balls, progress bars) ------------------
     for i, tw in enumerate(_LS['tweens']):
         tw.update(dt)
         v = tw.value
@@ -62,7 +62,7 @@ def scene_anim(c, hr, t, pt, dt):
         names = ['bounce', 'elastic', 'cubic io', 'back', 'circ']
         c.draw_text(bx - 3, 20, names[i], DIM, z=100)
 
-    # ── OSCILLATOR ───────────────────────────────────────────────
+    # -- OSCILLATOR -----------------------------------------------
     ov = _LS['osc'].value(t)
     ox = int(4 + ov * (c.w - 8))
     oy = 5
@@ -74,7 +74,7 @@ def scene_anim(c, hr, t, pt, dt):
     c.draw_text(c.w//2-8, 0, "Oscillator:", DIM)
     c.set_pixel(c.w-3, 5 if ov > 0.5 else 4, '→' if ov > 0.5 else '←', WHITE)
 
-    # ── SEQUENCE ─────────────────────────────────────────────────
+    # -- SEQUENCE -------------------------------------------------
     _LS['seq'].update(dt)
     sv = _LS['seq'].value
     if not _LS['seq'].done:

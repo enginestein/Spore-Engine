@@ -1,17 +1,17 @@
 # Spore Engine
 
-A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3D rendering, physics, fluid simulation, procedural generation, cellular automata, ray tracing, and 127+ demo scenes — all in pure Python with no external dependencies. Also includes image/video/GIF to ASCII conversion via ffmpeg or PIL, plus a **glyph art** module that converts media to copyable plain-text ASCII.
+A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3D rendering, physics, fluid simulation, procedural generation, cellular automata, ray tracing, and 125 demo scenes — all in pure Python with no external dependencies. Also includes image/video/GIF to ASCII conversion via ffmpeg or PIL, plus a **glyph art** module that converts media to copyable plain-text ASCII.
 
 ## Feature Highlights
 
 | Subsystem | Key Components |
 |---|---|
-| **Simple API** | `App`, `Sprite`, `Anim` — sprites from ASCII art, tweened animations, keyboard/mouse input, fluent chaining |
+| **Simple API** | `App`, `GameSprite`, `Anim` — sprites from ASCII art, tweened animations, keyboard/mouse input, fluent chaining |
 | **Core Rendering** | `Canvas`, `HiResCanvas` (2x vertical via half-blocks), `Color` (HSV, hex, blending, gradients), `Sprite`, `Vec2`/`Vec3`/`Mat4` |
 | **3D Rendering** | `Mesh3D` with wireframe & solid shading, OBJ/PLY loader, backface culling, depth sort, light direction |
 | **Isometric** | `IsoTile`, `IsoMap`, `IsoCamera` — tile grid with screen projection |
 | **Voxel** | `VoxelScene` — heightmap-based 3D landscape with directional shading & fog |
-| **Ray Tracing** | `Scene`, `Sphere`, `Plane`, Phong shading, reflections, refraction, multiple light sources |
+| **Ray Tracing** | `RayScene`, `Sphere`, `Plane`, Phong shading, reflections, refraction, multiple light sources |
 | **SDF Ray Marching** | `SDFScene`, `sd_sphere`/`sd_box`/`sd_torus`/`sd_cylinder`, CSG ops (union/subtract/intersect/smooth/repeat) |
 | **Physics 2D** | `PhysicsWorld`, `Body`, `Spring`, `AABB`, `RectBody`, `RayCast`, `ForceField`, `DistanceJoint`, SAT collision (`PolyBody`, `CompoundBody`, `sat_collide`) |
 | **Physics 3D** | `Body3D`, `BoxBody3D`, `Spring3D`, `PhysicsWorld3D` with gravity, rotation, bounds |
@@ -22,7 +22,7 @@ A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3
 | **Vector Fields** | `FieldSource` (vortex/sink/source/swirl), `VectorField`, `FieldParticle`, `FieldSystem` |
 | **2D Lighting** | `Ray2D`, `Light`, `LightManager`, `cast_ray`/`cast_ray_dda`, `visibility_polygon`, `render_shadows` |
 | **Visual Effects** | `plasma`, `fire`, `starfield`, `matrix_rain` |
-| **Text Effects** | 12 animations: `glitch_text`, `typewriter_text`, `sine_text`, `rainbow_text`, `gradient_text`, `scroll_text`, `star_wars_crawl`, `wave_text`, `fire_text`, `matrix_code_rain`, `bounce_text` |
+| **Text Effects** | 12 animations: `glitch_text`, `typewriter_text`, `sine_text`, `rainbow_text`, `gradient_text`, `scroll_text`, `star_wars_crawl`, `wave_text`, `fire_text`, `matrix_code_rain`, `bounce_text`, `zoom_text` |
 | **Screen Effects** | `shake`, `fade_overlay`, `flash`, `crossfade`, `color_overlay` |
 | **Post-Processing** | `box_blur`, `glow`, `edge_detect`, `dither`, `scanlines`, `vignette`, `chromatic_aberration`, `pixelate`, `palette_remap` |
 | **Shader Pipeline** | `Shader`, `ShaderPipeline` — 16 modular shaders: `WaveDistort`, `SwirlDistort`, `KuwaharaFilter`, `Posterize`, `Solarize`, `CelShade`, `HeatHaze`, `Emboss`, `PixelSort`, `Crystallize`, `ASCIIRemap`, `ChannelShift`, `Kaleidoscope`, `Warp`, `VHSGlitch`, `Ripple` |
@@ -31,7 +31,7 @@ A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3
 | **Animation** | `Tween`, `Sequence`, `Oscillator`, `Ticker`, 20+ easing functions, `Animator`, `Entity`, `Path`/`PathFollower`, `Keyframe`/`Track`/`Timeline`, IK `Bone`/`Skeleton` (FABRIK solver, arm/leg/tentacle creators) |
 | **Procedural Gen** | `Terrain` (Perlin heightmap + island), `Maze` (DFS/Prim's), `LSystem` (stochastic too), `DungeonGen` (BSP rooms+corridors), `ErosionSim`, `WFC` (wave function collapse), fractals (`Mandelbrot`, `BurningShip`, `NewtonFractal`, `BarnsleyFern`) |
 | **Noise** | `PerlinNoise` (2D/3D, fbm), `WorleyNoise`, `OpenSimplexNoise`, `ValueNoise` |
-| **Cellular Automata** | `GameOfLife`, `Automata1D`, `WireWorld`, `LangtonsAnt`, `ReactionDiffusion` (Gray-Scott), 12+ built-in GoL patterns |
+| **Cellular Automata** | `GameOfLife`, `Automata1D`, `WireWorld`, `LangtonsAnt`, `ReactionDiffusion` (Gray-Scott), 8 built-in GoL patterns |
 | **Powder Simulation** | `PowderSim` — 12 materials (Sand/Water/Stone/Wood/Fire/Smoke/Oil/Lava/Acid/Plant/Salt/Steam), liquid/gas/solid physics, flammability, melting, erosion |
 | **Biome Maps** | `BiomeMap` — 12 biomes from elevation/moisture/temperature (ocean, beach, desert, grassland, forest, rainforest, tundra, taiga, mountains, snow, swamp, savanna) |
 | **Scenery** | `ParallaxScenery`, `ParallaxLayer`, `Cloud`, `CloudLayer`, `MountainProfile`, `Tree`, `WaterSurface`, `DayNightCycle` (sky/stars/moon) |
@@ -39,25 +39,25 @@ A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3
 | **Pathfinding** | `AStar` — 4/8-directional, weighted grid, path visualization |
 | **Delaunay / Voronoi** | `Delaunay`, `Point`, `Triangle`, circumcircle-based triangulation, Voronoi diagram rendering |
 | **Marching Cubes** | 3D isosurface extraction to `Mesh3D` with density grid generation |
-| **Terminal UI** | 17 widgets: `Label`, `TextBox`, `ProgressBar`, `Button`, `Menu`, `Frame`, `Checkbox`, `RadioGroup`, `TabBar`, `Slider`, `Table`, `Input`, `Toggle`, `Divider`, `StatusBar`, `WidgetManager` + `TerminalApp` (event loop, mouse, keyboard), `Form`, `Dialog` |
-| **TileMap** | `TileMap`, `Camera`, auto-tiling, collision, `generate_platformer`, `generate_cave` |
+| **Terminal UI** | 17 widgets: `Label`, `TextBox`, `ProgressBar`, `Button`, `Menu`, `Frame`, `Checkbox`, `RadioGroup`, `TabBar`, `Slider`, `Table`, `TextField`, `Toggle`, `Divider`, `StatusBar`, `WidgetManager` + `TerminalApp` (event loop, mouse, keyboard), `Form`, `Dialog` |
+| **TileMap** | `TileMap`, `TileCamera`, auto-tiling, collision, `generate_platformer`, `generate_cave` |
 | **Bitmap Font** | `Font` — 5x7 character glyphs |
 | **Media I/O** | Image/video/GIF → ASCII (`ImageConverter`, `image_to_canvas`, `video_to_ascii`), `ScreenRecorder`, `glyphart` (copyable plain-text ASCII), ANSI file I/O (parse/export/save/load), `Video`/`FramePlayer`, canvas scaling & gradient |
-| **Demo Scenes** | 127+ interactive demo scenes in `demo.py` / `demos/` |
+| **Demo Scenes** | 125 interactive demo scenes in `demo.py` / `demos/` |
 
 ## Quick Start
 
 ```bash
 python3 easy_demo.py             # Simple API demo (sprites, animation, input)
-python3 demo.py                  # Interactive demo (127+ scenes)
+python3 demo.py                  # Interactive demo (125 scenes)
 ```
 
 ```python
 # Easy API — sprites from ASCII art, fluent animation
-from spore_engine.easy import App, Sprite
+from spore_engine.easy import App, GameSprite
 
 app = App()
-player = Sprite("""  @  \n /@\\ \n / \\""", x=5, y=10, fg=Color(255, 200, 100))
+player = GameSprite("""  @  \n /@\\ \n / \\""", x=5, y=10, fg=Color(255, 200, 100))
 player.move_to(70, 10).over(3).ease('bounce_out')
 app.run()
 ```
@@ -93,7 +93,7 @@ app.run()
 
 ## Documentation
 
-- [`docs/usage.md`](docs/usage.md) — Comprehensive usage guide
+- [`wiki/usage.md`](wiki/usage.md) — Comprehensive usage guide
 - [`wiki/math.md`](wiki/math.md) — Vector/matrix math, rendering math, simulation math
 - [`wiki/files.md`](wiki/files.md) — How each file contributes to the engine
 - [`wiki/architecture.md`](wiki/architecture.md) — How everything works together

@@ -1,14 +1,14 @@
 import math
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, Sphere, Plane
+from spore_engine.render3d.raytracer import RayScene, Sphere, Plane
 
 
 _scene = None
 def scene_raytracer_moonlit(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(10, 12, 30)
         _scene.objects.append(Plane(0, 1, 0, -2.8, Color(25, 28, 45), reflect=0.55))
         _scene.objects.append(Plane(0, -1, 0, -2.8, Color(20, 22, 40), reflect=0.45))

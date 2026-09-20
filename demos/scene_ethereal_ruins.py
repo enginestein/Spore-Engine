@@ -62,7 +62,7 @@ def _is_wall(m, mx, my):
 
 _ruins_state = None
 def scene_ethereal_ruins(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
-    """Ethereal Ruins — Atmospheric raycaster through ancient glowing ruins"""
+    """Ethereal Ruins - Atmospheric raycaster through ancient glowing ruins"""
     global _ruins_state
     m = _RUINS_MAP
     mw, mh = len(m[0]), len(m)
@@ -94,7 +94,7 @@ def scene_ethereal_ruins(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     mx, my = int(p['px']), int(new_py)
     can_move_y = not _is_wall(m, mx, my) and not _is_wall(m, int(p['px'])-1 if dx > 0 else -1, my) and not _is_wall(m, int(p['px'])+1, my)
 
-    # Check if both axes blocked — stuck
+    # Check if both axes blocked - stuck
     stuck = not can_move_x and not can_move_y
 
     if stuck:

@@ -1,14 +1,14 @@
 import math
 from spore_engine import *
 from spore_engine.core.color import *
-from spore_engine.render3d.raytracer import Scene, Sphere, Plane
+from spore_engine.render3d.raytracer import RayScene, Sphere, Plane
 
 
 _scene = None
 def scene_raytracer_crystal(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
     global _scene
     if _scene is None:
-        _scene = Scene()
+        _scene = RayScene()
         _scene.ambient = Color(12, 12, 30)
         _scene.objects.append(Plane(0, 1, 0, -2.5, Color(30, 30, 50), reflect=0.5))
         _scene.objects.append(Plane(-0.707, 0, 0.707, 3.5, Color(45, 35, 55), reflect=0.55))

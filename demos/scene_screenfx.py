@@ -27,7 +27,7 @@ def scene_screenfx(c, hr, t, pt, dt):
         for x in range(0, c.w, 4):
             c.set_pixel(x, y, '+', Color(60, 60, 80), z=5)
 
-    # ── 2. APPLY EFFECTS IN CYCLE ────────────────────────────────
+    # -- 2. APPLY EFFECTS IN CYCLE --------------------------------
     phase = int(t / 3) % 6
     cycle_t = (t % 3) / 3
 
@@ -72,7 +72,7 @@ def scene_screenfx(c, hr, t, pt, dt):
         label = "Vignette"
         col = Color(180, 180, 220)
 
-    # ── 3. HUD ────────────────────────────────────────────────────
+    # -- 3. HUD ----------------------------------------------------
     c.draw_text(2, 0, f"Screen FX — {label}", col, z=100)
     c.draw_text(2, 1, f"Cycle: {['Shake','Black Fade','Flash','Red Tint','Scanlines','Vignette'][phase]}", WHITE, z=100)
     c.draw_text(c.w//2-8, c.h-1, "[cycles every 3s]", Color(80, 80, 80), z=100)

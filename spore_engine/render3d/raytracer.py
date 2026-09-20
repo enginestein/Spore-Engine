@@ -273,7 +273,7 @@ class TexturedQuad:
         return Color(r, g, b)
 
 
-class Scene:
+class RayScene:
     def __init__(self):
         self.objects: list = []
         self.lights: list[tuple[float, float, float, Color, float]] = []
