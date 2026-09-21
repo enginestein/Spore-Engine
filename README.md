@@ -7,7 +7,8 @@ A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3
 | Subsystem | Key Components |
 |---|---|
 | **Simple API** | `App`, `GameSprite`, `Anim` — sprites from ASCII art, tweened animations, keyboard/mouse input, fluent chaining |
-| **Core Rendering** | `Canvas`, `HiResCanvas` (2x vertical via half-blocks), `Color` (HSV, hex, blending, gradients), `Sprite`, `Vec2`/`Vec3`/`Mat4` |
+| **Assets & ECS** | Unified `load_sprite`/`load_palette`/`load_model`/`load_text` loaders behind a memoized `Assets` store; `World`/`System`/`Component`/`EcsEntity` game-logic ECS that draws through `SpriteRenderSystem` into Scene/Layer |
+| **Core Rendering** | `Canvas`, `HiResCanvas` (2x vertical via half-blocks), `Color` (HSV, hex, blending, gradients), `Sprite`, `Vec2`/`Vec3`/`Mat4`, incremental per-frame flush (only changed cells re-emitted) |
 | **3D Rendering** | `Mesh3D` with wireframe & solid shading, OBJ/PLY loader, backface culling, depth sort, light direction |
 | **Isometric** | `IsoTile`, `IsoMap`, `IsoCamera` — tile grid with screen projection |
 | **Voxel** | `VoxelScene` — heightmap-based 3D landscape with directional shading & fog |

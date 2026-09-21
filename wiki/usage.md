@@ -314,6 +314,15 @@ Every draw primitive takes an optional trailing `z=` depth (default `0`).
 usual way to paint skies/backgrounds under sprites) draw over a cleared canvas
 and are in turn covered by `z >= 0` foreground work.
 
+Output is incremental: `render_to()` diffs the buffer against the last frame
+it wrote and re-emits only the cells that changed, grouped into runs with one
+cursor jump each. `clear()` keeps that diff, so the always-clear loop used by
+`App` and the demos only sends the pixels that actually moved — a static
+background is written once and then skipped. Need a full rewrite (resize,
+garbled terminal)? `render_to(stream, force_full=True)` or `full_redraw()`.
+`render_stats` reports how many cells/rows/bytes went out last frame, handy
+for checking you are not resending static work.
+
 ### Color
 
 ```python
@@ -368,6 +377,74 @@ st['score'] = st.get('score', 0) + 1
 clear_scene_states()             # wipe all (e.g. when a scene restarts)
 list_scene_states()              # -> ['gravity', ...]
 ```
+
+### Loading Assets (sprites, palettes, models, text)
+
+```python
+from spore_engine import load_sprite, load_palette, load_model, load_text
+
+spr = load_sprite('hero.spr')          # core Sprite
+pal = load_palette('ramp.pal')         # list[Color]
+mesh = load_model('ship.obj')          # Mesh3D (.obj/.ply), None if missing
+text = load_text('level1.txt')
+```
+
+Sprite files carry a small header before the art:
+
+```python
+# a comment
+fg=#ffcc00          # default foreground
+bg=#000033          # default background
+#@=#ff0000          # per-glyph override: '@' is red everywhere
+@@@
+@ @
+```
+
+The first non-header line starts the art and everything after it is taken
+verbatim. Palette files list one colour per line — `#rrggbb`, `rrggbb`,
+`r,g,b` or `r g b` — with comments starting `# `.
+
+Loading is memoized: the shared `assets` store returns the same object for
+the same file and options, so calling `load_sprite()` every frame is cheap.
+Use a private `Assets()` (or `Assets(cache=False)`) when you want isolated or
+uncached loading, and `assets.clear()` to drop the whole store.
+
+### Entity-Component System (ECS)
+
+```python
+import math
+from spore_engine import (World, System, Scene,
+                          Transform, SpriteComponent, SpriteRenderSystem,
+                          load_sprite)
+
+class Hover(System):
+    def __init__(self):
+        super().__init__(priority=0)   # lower runs first
+        self.t = 0.0
+    def update(self, world, dt):
+        self.t += dt
+        for e in world.query(Transform):
+            e.get(Transform).y = int(10 + 6 * math.sin(self.t))
+
+world = World()
+hero = world.create()
+hero.add(Transform(5, 3, z=5))
+hero.add(SpriteComponent(load_sprite('hero.spr')))
+
+scene = Scene(80, 24)
+world.add_system(Hover())                    # game logic
+world.add_system(SpriteRenderSystem(scene))  # then draw
+world.update(0.016)
+scene.present(sys.stdout)
+```
+
+Entities are `EcsEntity` objects — plain id plus components keyed by their
+type — so `world.query(*types)` returns everything carrying every listed
+component, in creation order, and systems run in `priority` order each
+`world.update(dt)`. `SpriteRenderSystem` is the Scene/Layer tie-in: pass
+`layer='hud'` to draw onto an overlay layer instead of the main canvas.
+(The class is `EcsEntity`, not `Entity` — the animation package already owns
+that name.)
 
 ### Keyboard & Input Events (core)
 
@@ -1155,6 +1232,7 @@ save_ansi_file('output.ans', c)     # ANSI art file with cursor positioning
 5. **Reduce ray tracing resolution** — Sample every 2nd or 4th pixel.
 6. **Pre-compute noise** — Cache noise values for static terrain.
 7. **Use batch drawing** — `fill_rect()` is faster than individual `set_pixel()`.
+8. **Clearing every frame is fine** — `render_to()` diffs against the previous frame, so clear-then-repaint only writes what actually changed. Don't pass `force_full=True` per frame; reserve it for resizes/desyncs.
 
 ---
 

@@ -35,7 +35,7 @@ flowchart TD
     CORE_CANVAS["Canvas"] -->|"composed of"| CORE_CELL["Cell{char,fg,bg,z}"]
     CORE_CANVAS -->|"double-res"| CORE_HIRES["HiResCanvas"]
     CORE_HIRES -->|"to_canvas()"| CORE_CANVAS
-    CORE_CANVAS -->|"render_to(stream)"| OUTPUT["ANSI Escape Codes → stdout"]
+    CORE_CANVAS -->|"render_to (diff vs previous frame)"| OUTPUT["ANSI Escape Codes → stdout"]
 
     CORE_COLOR["Color"] --> CORE_CELL
     CORE_GRAD["Gradient"] --> CORE_COLOR
@@ -71,6 +71,9 @@ flowchart TD
     CORE_CAM["Camera (world→screen)"] -->|"to_screen / draw"| CORE_CANVAS
     CORE_UTIL["clamp/lerp/ramp/wave/osc/bounce/..."] -.-> CORE_CAM
     CORE_UTIL -.-> SFX_CLASS
+    AUTH_ASSETS["Assets / load_sprite / load_palette / load_model / load_text"] -->|"memoized per file"| CORE_SPRITE
+    AUTH_ASSETS --> R3D_LOAD
+    AUTH_ECS["World / System / Component / EcsEntity"] -->|"SpriteRenderSystem → blit_to"| AUTH_SCENE
   end
 
   %% ─── MATH/GEOMETRY ──────────────────────────────────────────────
@@ -343,7 +346,7 @@ flowchart TD
 
   %% ─── OUTPUT ─────────────────────────────────────────────────────
   subgraph OUT["🖨️ Output"]
-    OUTPUT -->|"\\033[H + cells + \\033[0m"| TERM["Terminal (stdout)"]
+    OUTPUT -->|"\\033[H + batched cursor moves + changed cells + \\033[0m"| TERM["Terminal (stdout)"]
     MEDIA_REC --> SCREEN_REC["Screen Recording (frames)"]
   end
 ```

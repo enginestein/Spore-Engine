@@ -48,10 +48,19 @@ Effects from `postfx.py` and `shaders.py` can transform the canvas after the sce
 
 ### 4. Output
 `canvas.render_to(sys.stdout)` writes ANSI escape sequences:
-- `\033[H` — Move cursor home
+- `\033[H` — Move cursor home (first frame or `clear_first=True`)
+- `\033[<row>;<col>H` — Jump to the start of a changed run
 - `\033[38;2;R;G;Bm` — Set foreground color
 - `\033[48;2;R;G;Bm` — Set background color
 - `\033[0m` — Reset
+
+Rendering is dirty-cell/incremental: each frame is compared cell-by-cell
+against the previous rendered frame and only the changed cells are emitted,
+batched into contiguous runs with one cursor jump and minimal color
+transitions per run. `clear()` keeps the diff, so the common clear-then-
+repaint loop does not resend a static background. `force_full=True` or
+`full_redraw()` forces a complete rewrite (terminal desync, resize), and
+`render_stats` shows what actually went out.
 
 For HiResCanvas: `to_canvas()` first flattens the double-resolution buffer to a Canvas using Unicode half-block characters (▀ ▄ █), then renders normally.
 
@@ -287,6 +296,25 @@ BiomeMap
   → Canvas rendering (colored tiles per biome)
 ```
 
+### Asset Loading Data Flow
+```
+file on disk (.spr/.aa, .pal, .obj/.ply, .txt)
+  → load_sprite / load_palette / load_model / load_text
+  → Assets store memoizes by (kind, path, options)
+  → core Sprite, list[Color], render3d Mesh3D, str
+  → handed to scenes, SpriteRenderSystem, palettes, etc.
+```
+
+### ECS Rendering Data Flow
+```
+World
+  → create() entities, add() components (Transform, SpriteComponent, ...)
+  → update(dt): systems in priority order
+  → SpriteRenderSystem: world.query(Transform, SpriteComponent)
+  → sprite.blit_to(scene.canvas or scene.layer(name).canvas, x, y, z)
+  → scene.present() → Canvas.render_to() (incremental)
+```
+
 ---
 
 ## Demo System Architecture
@@ -379,8 +407,9 @@ For downlevel terminals: `.to_ansi_256()` approximates to xterm 256-color palett
 6. **HiResCanvas** — Doubles vertical resolution via Unicode half-blocks, no terminal cell size change.
 7. **Semi-Lagrangian advection** — Unconditionally stable fluid simulation without CFL constraints.
 8. **Substepping** — Physics world divides dt into smaller steps for stable constraint solving.
-9. **Double-buffering** — Canvas updates are fully rendered to buffer, then flushed to terminal atomically.
+9. **Incremental output** — `render_to()` diffs each frame against the previous one and rewrites only changed cells with batched cursor moves; `clear()` keeps the diff so a steady frame emits nothing. `force_full`/`full_redraw()` escape hatch after a desync.
 10. **Raw terminal mode** — `demo.py` and `easy.App.run()` use raw mode for real-time keyboard input without the Enter key; `core/input.py` decodes escape sequences (arrows, F-keys, Home/End, PgUp/PgDn, etc.).
+11. **One asset door** — `core/assets.py` loads sprites/palettes/models/text through a single memoized store, and the ECS (`core/ecs.py`) keeps game state in plain components while drawing through the same Scene/Layer compositor everything else uses.
 
 
 ---
@@ -389,7 +418,8 @@ For downlevel terminals: `.to_ansi_256()` approximates to xterm 256-color palett
 
 ```
 core/        ← No internal dependencies (foundation layer); canvas.py, draw.py,
-               color.py, geom.py, + state/scene/camera/input/util for authoring
+               color.py, geom.py, + state/scene/camera/input/util/assets/ecs
+               for authoring
 sim/         → core/ (uses Vec2/Vec3, Color, Canvas)
 gen/         → core/ + sim/ (uses noise, physics)
 render3d/    → core/ (uses Mat4, Vec3, Canvas)
@@ -402,7 +432,10 @@ media/       → core/ (uses Canvas, Color)
 
 `fx/screenfx.py` imports `clamp` from `core/util.py`, and `easy/app.py`
 imports core `Input`/`Camera` — the core layer stays dependency-free while the
-new scene-authoring modules (`state`, `scene`, `camera`, `input`, `util`) reuse
-only `canvas.py`/`color.py`. None of the subpackages depend on each other
+new scene-authoring modules (`state`, `scene`, `camera`, `input`, `util`,
+`ecs`, `assets`) reuse only `canvas.py`/`color.py`/`scene.py`. The one soft
+edge is `core/assets.py`, which reaches into `render3d.model_loader` for
+OBJ/PLY loading; the import is inside the function, so core never depends on
+render3d at import time. None of the subpackages depend on each other
 (except `sim/` → `core/` and `easy/` → `anim/`), keeping the architecture
 modular.

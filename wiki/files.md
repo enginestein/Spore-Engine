@@ -25,7 +25,7 @@ spore_engine/
 ## Core (`spore_engine/core/`)
 
 ### `__init__.py`
-Re-exports all core types for convenient `from spore_engine import Canvas, Color, ...`, plus the scene-authoring layer (`SceneState`, `Scene`, `Layer`, `Camera`, `Input`, `KeyState`) and the math utils (`clamp`, `lerp`, `ramp`, `wave`, `osc`, ...).
+Re-exports all core types for convenient `from spore_engine import Canvas, Color, ...`, plus the scene-authoring layer (`SceneState`, `Scene`, `Layer`, `Camera`, `Input`, `KeyState`), the math utils (`clamp`, `lerp`, `ramp`, `wave`, `osc`, ...), the asset store (`Assets`, `assets`, `load_sprite`/`load_palette`/`load_model`/`load_text`), and the ECS (`World`, `System`, `Component`, `EcsEntity`, `Transform`, `SpriteComponent`, `SpriteRenderSystem`).
 
 ### `color.py`
 **`Color`** — Immutable RGB dataclass with ANSI truecolor escape generation, HSV/hex conversion, luminance, lerp, blend, mul, and ANSI 256 approximation.
@@ -41,7 +41,9 @@ Re-exports all core types for convenient `from spore_engine import Canvas, Color
 
 ### `canvas.py`
 **`Cell`** — A single terminal cell: char, fg Color, bg Color, z-depth.
-**`Canvas`** — The primary framebuffer (`w × h` Cell grid). Cells start at `z = -inf`; `clear()` resets to `z = -inf`. All drawing lives in `DrawMixin` (see `draw.py`, inherited by both surfaces); `canvas.py` contributes `set_pixel`/`get_pixel` (z-depth occlusion test), `set_pixel_f` (fractional-coordinate pixel), `half_block`/`half_block_pixel` (Unicode half-block primitives), `render_to` (ANSI escape code output), and `copy` (deep copy).
+**`Canvas`** — The primary framebuffer (`w × h` Cell grid). Cells start at `z = -inf`; `clear()` resets to `z = -inf`. All drawing lives in `DrawMixin` (see `draw.py`, inherited by both surfaces); `canvas.py` contributes `set_pixel`/`get_pixel` (z-depth occlusion test), `set_pixel_f` (fractional-coordinate pixel), `half_block`/`half_block_pixel` (Unicode half-block primitives), `render_to` (incremental ANSI output, below), and `copy` (deep copy).
+
+Output is dirty-cell: `render_to(stream, clear_first=True, force_full=False)` diffs the buffer against the previous rendered frame and rewrites only the cells that changed, grouped into contiguous runs with one cursor move (`\033[<row>;<col>H`) each and minimal color transitions. Background colour is part of the diff key, so a pure background-color change is caught too. `clear()` does not throw the diff away — the usual clear-and-repaint loop (as in `easy.App`) stays incremental, and a frame identical to the last one emits nothing. `force_full=True`, or `full_redraw()`, forces a complete rewrite (after a resize or a terminal desync). `render_stats` reports how many cells/rows/bytes the last render emitted and whether it was a full redraw.
 **`HiResCanvas`** — Double-resolution canvas (`w × 2h` buffer). `to_canvas(canvas, z=0, blank=False)` maps vertical pixel pairs to half-block chars (▀ ▄ █); it *skips empty cells by default* so a pre-drawn background survives, `blank=True` also erases empties.
 **Role:** Everything renders to Canvas (or HiResCanvas). The entire engine's output surface.
 
@@ -61,6 +63,14 @@ Every primitive takes a trailing `z=` depth (default 0). Lazy `_shade_chars()` h
 **`Sprite`** — ASCII art sprite with `from_string()`, `from_file()`, `blit_to(canvas)`, mirror, rotate, scale.
 **Role:** Reusable ASCII art assets (tiles, logos, decorations).
 
+### `assets.py`
+**`Assets`** — Memoized asset store; `assets` is the shared module-level instance, `Assets()` makes a private one (`cache=False` skips memoizing).
+**`load_sprite(path, fg, bg)`** — Parse a sprite file into a core `Sprite`. A small header is peeled off before the art: `# comment`, `fg=#rrggbb`, `bg=#rrggbb`, and per-glyph colour map lines `#c=#rrggbb` (one per glyph). The first non-header line starts the art, which is then taken verbatim.
+**`load_palette(path)`** — One colour per line (`#rrggbb`, `rrggbb`, `r,g,b` or `r g b`); comments start with `# `. Returns an ordered `list[Color]`.
+**`load_model(path, scale, color)`** — Routes `.obj`/`.ply` to `render3d.load_obj`/`load_ply` (imported lazily); returns `None` when the file is missing or unrecognised.
+**`load_text(path)`** — Verbatim text (levels, dialogue, glyph tables).
+**Role:** One door for loading game data from files, cached once per key (file + options).
+
 ### `state.py`
 **`SceneState`** — Per-scene scratch memory shared across frames and scene restarts. Supports `st.tick(dt)` (`st.t += dt`), attribute access, `get(key, default, factory=)`, `__contains__`, iteration, and `clear()`.
 **`scene_state(name)`** — Returns the shared `SceneState` for a scene (same object every call).
@@ -72,6 +82,16 @@ Every primitive takes a trailing `z=` depth (default 0). Lazy `_shade_chars()` h
 **`Scene`** — Composes a `Canvas` + `HiResCanvas` (`s.hr`) + named `Layer`s into one object. `__getattr__` forwards unknown attributes to `s.canvas`, so a Scene drops in wherever a Canvas is expected. `compose()` stacks hr over canvas; `present(stream)` renders.
 **`Layer`** — Named canvas with a `z`, forwards draw calls to its own canvas.
 **Role:** Grouped/background+foreground drawing for games and HUDs.
+
+### `ecs.py`
+**`Component`** — Base class for plain data holders, keyed on an entity by their type.
+**`EcsEntity`** — An id plus attached components (`add`/`get`/`has`/`remove`). Named `EcsEntity` so it never collides with the animation `Entity`.
+**`World`** — Owns entities and systems: `create()`, `delete()`, `query(*types)` (entities carrying every listed component, in creation order), `add_system()`, and `update(dt)` which runs systems in `priority` order.
+**`System`** — Base class; override `update(world, dt)`.
+**`Transform`** — Position/scale component (x, y, z, scale).
+**`SpriteComponent`** — A drawable: a core `Sprite` plus per-entity fg/bg/transparent/z overrides.
+**`SpriteRenderSystem`** — The Scene/Layer tie-in: every entity holding a `Transform` and a `SpriteComponent` is blitted onto a `Scene` canvas each update — or onto one of its named layer canvases via `layer=`. Depth falls back to the transform's z, then the system's own z.
+**Role:** Game state in ECS terms, presenting through the existing `Scene.present` compositor.
 
 ### `camera.py`
 **`Camera`** — 2D viewport onto a larger world. `to_screen`/`to_world` (with `zoom`), edges via `left/right/top/bottom`, `in_view()`, smoothed `follow(x, y, dt)` with world-bound `clamp()`, and draw helpers (`draw`, `draws`, `draw_line`, `draw_text`) that transform world coords.
