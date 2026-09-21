@@ -190,12 +190,8 @@ $$
 3. **Projection transform:** Camera $\to$ clip space (via `perspective` matrix)
 4. **Perspective divide:** $(x/w,\; y/w,\; z/w) \to$ NDC in $[-1, 1]^3$
 5. **Viewport transform:** NDC $\to$ pixel coordinates:
-   $$
-   \begin{aligned}
-   s_x &= \text{int}\big((x + 1) \times 0.5 \times \text{canvas\_width}\big) \\
-   s_y &= \text{int}\big((1 - y) \times 0.5 \times \text{canvas\_height}\big)
-   \end{aligned}
-   $$
+   $s_x = \lfloor (x+1) \times 0.5 \times \text{canvas\_width} \rfloor$ and
+   $s_y = \lfloor (1-y) \times 0.5 \times \text{canvas\_height} \rfloor$
 
 ### Face Normal Calculation
 $$
@@ -633,7 +629,7 @@ $$
 1. Push start node onto open set (priority queue ordered by $F$)
 2. Pop node with lowest $F$; if it's the goal, reconstruct path
 3. For each neighbor, compute tentative $G = \text{current}.G + \text{edge cost}$
-4. If tentative $G < \text{neighbor}'$s recorded $G$, update parent and push to open set
+4. If tentative $G$ is smaller than a neighbor's currently recorded $G$, update the neighbor's parent and push it to the open set
 5. Repeat until goal reached or open set empty
 
 The heuristic guides search toward the goal; with an admissible heuristic (never overestimates), A* is guaranteed optimal.

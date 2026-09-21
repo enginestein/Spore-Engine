@@ -53,6 +53,11 @@ from spore_engine.core import (Color, Gradient, PALETTES,
     approach, move_toward, bounce, dist, lerp_color,
     smoothstep, ramp_color)
 
+from spore_engine.core import (Assets, assets, load_sprite, load_palette,
+     load_model, load_text,
+     Component, EcsEntity, World, System, Transform,
+     SpriteComponent, SpriteRenderSystem)
+
 from spore_engine.fx import (plasma, fire, starfield, matrix_rain,
     ParticleSystem, Burst, Emitter,
     FountainEmitter, StreamEmitter, FireEmitter,

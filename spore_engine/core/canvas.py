@@ -48,6 +48,7 @@ class Canvas(DrawMixin):
                        for _ in range(height)]
         self._dirty = True
         self._prev_render = None
+        self._last_stats = None
 
     def clear(self, char: str = ' '):
         for y in range(self.height):
@@ -59,7 +60,6 @@ class Canvas(DrawMixin):
                 cell.bg = None
                 cell.z = -float('inf')
         self._dirty = True
-        self._prev_render = None
 
     def set_pixel(self, x: int, y: int, char: str = '#',
                   fg: Optional[Color] = None, bg: Optional[Color] = None,
@@ -124,30 +124,49 @@ class Canvas(DrawMixin):
             c.bg = None
         c.z = z
 
-    def render_to(self, stream, clear_first: bool = True):
-        self._render_impl(stream, clear_first)
+    def render_to(self, stream, clear_first: bool = True, force_full: bool = False):
+        self._render_impl(stream, clear_first, force_full)
 
-    def _render_impl(self, stream, clear_first: bool):
+    def full_redraw(self):
+        """Force the next ``render_to`` to rewrite every cell (invalidate the
+        incremental frame diff, used after a terminal desync or resize)."""
+        self._prev_render = None
+        self._dirty = True
+
+    @property
+    def render_stats(self):
+        """Cells/rows/bytes emitted by the last render, plus whether it was a
+        full-buffer redraw. Useful to prove incrementality in demos and tests."""
+        return self._last_stats
+
+    def _render_impl(self, stream, clear_first: bool, force_full: bool = False):
         reset = '\033[0m'
         width = max(1, self.width)
         h = self.height
-        # canonical key for a cell: (char, r, g, b) with None->(-1,-1,-1)
+        # canonical key for a cell: (char, fg, bg) with None->(-1,-1,-1)
         def key(cell):
             fg = cell.fg
+            bg = cell.bg
             return (cell.char if cell.char else ' ',
-                    (fg.r, fg.g, fg.b) if fg is not None else (-1, -1, -1))
+                    (fg.r, fg.g, fg.b) if fg is not None else (-1, -1, -1),
+                    (bg.r, bg.g, bg.b) if bg is not None else (-1, -1, -1))
 
         prev = self._prev_render
+        full = prev is None
         if prev is None or len(prev) != h or any(len(r) != self.width for r in prev):
             prev = [[None] * self.width for _ in range(h)]
             clear_first = True
+        elif force_full:
+            prev = [[None] * self.width for _ in range(h)]
+            full = True
 
-        home = False
+        cells_written = 0
+        rows_written = 0
+        bytes_written = 0
         if clear_first:
             stream.write('\033[H')
-            home = True
+            bytes_written += 3
 
-        emit_row = 0
         for y in range(h):
             row = self.buffer[y]
             prow = prev[y]
@@ -159,6 +178,7 @@ class Canvas(DrawMixin):
                     changed.append(x)
             if not changed:
                 continue
+            rows_written += 1
             # segment the changed columns into contiguous runs
             segs = []
             start = changed[0]
@@ -173,19 +193,22 @@ class Canvas(DrawMixin):
             segs.append((start, prevx))
 
             # seek to row start once if this row has any change
-            stream.write(f'\033[{y + 1};1H')
-            emit_row = y
+            move = f'\033[{y + 1};1H'
+            stream.write(move)
+            bytes_written += len(move)
             target = 0
             for (x0, x1) in segs:
                 if x0 > target:
-                    stream.write(f'\033[{y + 1};{x0 + 1}H')
+                    move = f'\033[{y + 1};{x0 + 1}H'
+                    stream.write(move)
+                    bytes_written += len(move)
                 # write the segment with minimal color transitions
                 last_fg = last_bg = None
                 seg_parts = []
-                disp = x0
                 for x in range(x0, x1 + 1):
                     cell = row[x]
-                    ch, fg = cell.char if cell.char else ' ', cell.fg
+                    ch = cell.char if cell.char else ' '
+                    fg = cell.fg
                     bg = cell.bg
                     if fg != last_fg or bg != last_bg:
                         if fg is None and bg is None:
@@ -197,15 +220,23 @@ class Canvas(DrawMixin):
                             seg_parts.append(''.join(parts))
                         last_fg, last_bg = fg, bg
                     seg_parts.append(ch)
-                    disp += 1
+                cells_written += (x1 - x0 + 1)
                 seg_parts.append(reset)
-                stream.write(''.join(seg_parts))
+                seg_str = ''.join(seg_parts)
+                stream.write(seg_str)
+                bytes_written += len(seg_str)
                 target = x1 + 1
             # update prev for this row
             for x in range(self.width):
                 prow[x] = key(row[x])
         stream.flush()
         self._prev_render = prev
+        self._last_stats = {
+            'cells': cells_written,
+            'rows': rows_written,
+            'bytes': bytes_written,
+            'full': full,
+        }
 
     def copy(self) -> Canvas:
         new_canvas = Canvas(self.width, self.height)
