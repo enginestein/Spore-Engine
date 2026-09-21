@@ -131,7 +131,7 @@ Uses the implicit circle function $f(x,y) = x^2 + y^2 - r^2$:
 $$
 \begin{aligned}
 d &= 1 - r \quad (\text{initial decision parameter at } (1, r-\tfrac12)) \\
-\text{if } d &< 0:\; d += 2x + 3 \quad (\text{next pixel is inside}) \\
+\text{if } d & \lt 0:\; d += 2x + 3 \quad (\text{next pixel is inside}) \\
 \text{else} &: \; d += 2(x-y) + 5,\; y -= 1 \quad (\text{next pixel is outside})
 \end{aligned}
 $$
@@ -190,8 +190,8 @@ $$
 3. **Projection transform:** Camera $\to$ clip space (via `perspective` matrix)
 4. **Perspective divide:** $(x/w,\; y/w,\; z/w) \to$ NDC in $[-1, 1]^3$
 5. **Viewport transform:** NDC $\to$ pixel coordinates:
-   $s_x = \lfloor (x+1) \times 0.5 \times \text{canvas\_width} \rfloor$ and
-   $s_y = \lfloor (1-y) \times 0.5 \times \text{canvas\_height} \rfloor$
+   $s_x = \lfloor (x+1) \times 0.5 \times \text{canvas-width} \rfloor$ and
+   $s_y = \lfloor (1-y) \times 0.5 \times \text{canvas-height} \rfloor$
 
 ### Face Normal Calculation
 $$
@@ -201,7 +201,7 @@ The cross product of two edges gives a perpendicular vector. The winding order (
 
 ### Back-Face Culling
 $$
-\text{if } N \cdot \text{view\_direction} \ge 0:\; \text{skip face}
+\text{if } N \cdot \text{view-direction} \ge 0:\; \text{skip face}
 $$
 Faces pointing away from the camera are invisible. Since view-space normals point toward the camera for visible faces, the dot product with $(0,0,1)$ is negative for visible faces.
 
@@ -209,7 +209,7 @@ Faces pointing away from the camera are invisible. Since view-space normals poin
 $$
 \begin{aligned}
 \text{brightness} &= \max(0.2,\; N \cdot L) \\
-\text{shaded\_color} &= \text{face\_color} \times \text{brightness}
+\text{shaded-color} &= \text{face-color} \times \text{brightness}
 \end{aligned}
 $$
 Lambert's cosine law: the perceived brightness varies with the cosine of the angle between the surface normal and the light direction. The 0.2 floor provides ambient fill.
@@ -226,23 +226,23 @@ A Wolfenstein-style ray caster using Digital Differential Analysis:
 ### Per-Column Ray
 $$
 \begin{aligned}
-\text{camera\_x} &= \frac{2x}{\text{screen\_width}} - 1 \\
-\text{ray\_dir} &= \text{direction} + \text{camera\_plane} \times \text{camera\_x}
+\text{camera-x} &= \frac{2x}{\text{screen-width}} - 1 \\
+\text{ray-dir} &= \text{direction} + \text{camera-plane} \times \text{camera-x}
 \end{aligned}
 $$
 
 ### DDA Grid Traversal
 $$
-\text{delta} = \left|\frac{1}{\text{ray\_dir}}\right| \quad (\text{distance to next grid boundary})
+\text{delta} = \left|\frac{1}{\text{ray-dir}}\right| \quad (\text{distance to next grid boundary})
 $$
 At each step, advance to the nearest grid boundary in $x$ or $y$. The perpendicular distance avoids fisheye:
 $$
-\text{perp\_dist} = \text{side\_dist} - \text{delta}
+\text{perp-dist} = \text{side-dist} - \text{delta}
 $$
 
 ### Wall Height
 $$
-\text{line\_height} = \frac{\text{screen\_height}}{\text{perp\_dist}}
+\text{line-height} = \frac{\text{screen-height}}{\text{perp-dist}}
 $$
 
 ---
@@ -311,11 +311,11 @@ For each pixel, march a ray from the camera origin:
 $$
 \begin{aligned}
 t &= 0.01 \\
-&\text{for step in range(max\_steps):} \\
-&\qquad d = \text{scene\_sdf}(\text{origin} + \text{direction} \cdot t) \\
-&\qquad \text{if } d < \epsilon:\; \text{hit surface} \\
+&\text{for step in range(max-steps):} \\
+&\qquad d = \text{scene-sdf}(\text{origin} + \text{direction} \cdot t) \\
+&\qquad \text{if } d \lt \epsilon:\; \text{hit surface} \\
 &\qquad t += d \\
-&\qquad \text{if } t > \text{max\_dist}:\; \text{miss}
+&\qquad \text{if } t \gt \text{max-dist}:\; \text{miss}
 \end{aligned}
 $$
 
@@ -374,8 +374,8 @@ Where $k_c$ = sediment capacity constant, $\nabla h$ = terrain slope, $v$ = drop
 ### Erosion / Deposition
 $$
 \begin{aligned}
-\text{if sediment} &< C:\; \text{terrain.height} -= \text{erosion\_rate} \cdot \text{speed} \cdot dh \cdot \text{water\_vol} \quad (\text{erode}) \\
-\text{else} &: \; \text{terrain.height} += (\text{sediment} - C) \cdot \text{deposit\_rate} \qquad (\text{deposit})
+\text{if sediment} & \lt C:\; \text{terrain.height} -= \text{erosion-rate} \cdot \text{speed} \cdot dh \cdot \text{water-vol} \quad (\text{erode}) \\
+\text{else} &: \; \text{terrain.height} += (\text{sediment} - C) \cdot \text{deposit-rate} \qquad (\text{deposit})
 \end{aligned}
 $$
 Erosion removes material from the current cell; deposition adds it back when the droplet is oversaturated.
@@ -383,7 +383,7 @@ Erosion removes material from the current cell; deposition adds it back when the
 ### Evaporation
 $$
 \begin{aligned}
-\text{water\_vol} &\times= (1 - \text{evap\_rate}) \\
+\text{water-vol} &\times= (1 - \text{evap-rate}) \\
 \text{speed} &= \sqrt{\text{speed}^2 + \text{gravity} \cdot dh}
 \end{aligned}
 $$
@@ -409,7 +409,7 @@ $$
 \begin{aligned}
 \text{normal} &= \text{normalize}(B.\text{pos} - A.\text{pos}) \\
 \text{overlap} &= A.\text{radius} + B.\text{radius} - \text{dist} \\
-j &= -\frac{(1 + e) \times \text{vel\_along\_normal}}{\text{total\_inv\_mass}} \quad (\text{impulse magnitude})
+j &= -\frac{(1 + e) \times \text{vel-along-normal}}{\text{total-inv-mass}} \quad (\text{impulse magnitude})
 \end{aligned}
 $$
 Derived from conservation of momentum and coefficient of restitution $e$.
@@ -473,9 +473,9 @@ $$
 Torque is accumulated per frame, then applied. Angular velocity is damped by friction.
 
 ### 3D Collision Detection
-- **Sphere-Sphere:** $\text{distance} < r_1 + r_2$
+- **Sphere-Sphere:** $\text{distance} \lt r_1 + r_2$
 - **Box-Box (SAT):** project axes onto each face normal; overlap on all axes = collision
-- **Sphere-Box:** closest point on box to sphere center; distance $<$ sphere radius
+- **Sphere-Box:** closest point on box to sphere center; distance $ \lt $ sphere radius
 
 ### Polygon Physics
 Convex polygon bodies use SAT for collision, with impulse-based resolution. The moment of inertia is computed from vertex geometry:
@@ -490,7 +490,7 @@ $$
 ### Seek
 $$
 \begin{aligned}
-\text{desired} &= \text{normalize}(\text{target} - \text{pos}) \cdot \text{max\_speed} \\
+\text{desired} &= \text{normalize}(\text{target} - \text{pos}) \cdot \text{max-speed} \\
 \text{steer} &= \text{desired} - \text{velocity}
 \end{aligned}
 $$
@@ -503,8 +503,8 @@ Same as seek but $\text{steer} = \text{velocity} - \text{desired}$ (repulsion fr
 Slow down within a braking radius:
 $$
 \begin{aligned}
-\text{if dist} &< \text{braking\_radius:} \\
-&\qquad \text{speed} = \text{max\_speed} \cdot \frac{\text{dist}}{\text{braking\_radius}} \\
+\text{if dist} & \lt \text{braking-radius:} \\
+&\qquad \text{speed} = \text{max-speed} \cdot \frac{\text{dist}}{\text{braking-radius}} \\
 &\qquad \text{desired} = \text{normalize}(\text{target} - \text{pos}) \cdot \text{speed}
 \end{aligned}
 $$
@@ -517,12 +517,12 @@ $$
 
 ### Flock (Reynolds Boids)
 $$
-\text{velocity} += \text{steer\_separate} + \text{steer\_align} + \text{steer\_cohesion}
+\text{velocity} += \text{steer-separate} + \text{steer-align} + \text{steer-cohesion}
 $$
 - **Alignment:** steer toward average velocity of neighbors
 - **Cohesion:** steer toward average position of neighbors
 
-Forces are weighted and clamped to $\text{max\_force}$; velocity is clamped to $\text{max\_speed}$.
+Forces are weighted and clamped to $\text{max-force}$; velocity is clamped to $\text{max-speed}$.
 
 ---
 
@@ -542,7 +542,7 @@ $$
 After the backward pass, re-anchor root at original position and repeat forward pass.
 
 ### Convergence
-Stop when $|\text{end\_effector} - \text{target}| < \text{tolerance}$ (typically 0.5 pixels). Handles both reachable and unreachable targets: if target is beyond total chain length, all bones align toward target.
+Stop when $|\text{end-effector} - \text{target}| \lt \text{tolerance}$ (typically 0.5 pixels). Handles both reachable and unreachable targets: if target is beyond total chain length, all bones align toward target.
 
 ### CCD Alternative
 Cyclic Coordinate Descent rotates each bone (from tip to root) to minimize the angle between the bone-to-end-effector and bone-to-target vectors.
@@ -572,7 +572,7 @@ $$
 $$
 \frac{\partial^2 h}{\partial t^2} = c^2 \nabla^2 h - \text{damping} \cdot \frac{\partial h}{\partial t}
 $$
-Discretized as: $\text{new} = (\text{neighbor\_sum} \times 0.5 - \text{current}) \times \text{damping}$. A Verlet-like finite-difference scheme. Each cell's new value is the average of its four neighbors minus the previous value, scaled by damping.
+Discretized as: $\text{new} = (\text{neighbor-sum} \times 0.5 - \text{current}) \times \text{damping}$. A Verlet-like finite-difference scheme. Each cell's new value is the average of its four neighbors minus the previous value, scaled by damping.
 
 ---
 
@@ -580,7 +580,7 @@ Discretized as: $\text{new} = (\text{neighbor\_sum} \times 0.5 - \text{current})
 
 ### Density Accumulation
 $$
-\text{density} += \text{density\_step} \cdot \sigma
+\text{density} += \text{density-step} \cdot \sigma
 $$
 Where $\sigma$ is the scattering coefficient. Density values decay over time (exponential decay per frame).
 
@@ -601,8 +601,8 @@ A cone is swept from the light origin with a given angular width. Each ray withi
 ## 17. Cellular Automata
 
 ### Conway's Game of Life
-- Alive with $<2$ neighbors: dies (underpopulation)
-- Alive with $>3$ neighbors: dies (overpopulation)
+- Alive with $ \lt 2$ neighbors: dies (underpopulation)
+- Alive with $ \gt 3$ neighbors: dies (overpopulation)
 - Dead with exactly 3 neighbors: becomes alive (reproduction)
 
 ### Gray-Scott Reaction-Diffusion
@@ -612,7 +612,7 @@ $$
 \frac{\partial V}{\partial t} &= D_V \nabla^2 V + UV^2 - (F+K)V
 \end{aligned}
 $$
-Where $F$ = feed rate, $K$ = kill rate, $D_U > D_V$ for pattern formation.
+Where $F$ = feed rate, $K$ = kill rate, $D_U \gt D_V$ for pattern formation.
 
 ---
 
@@ -668,7 +668,7 @@ $$
 \begin{aligned}
 d &= 2 \cdot (a.x \cdot (b.y - c.y) + b.x \cdot (c.y - a.y) + c.x \cdot (a.y - b.y)) \\
 \text{circum}(a,b,c) &= ((a_x^2 + a_y^2) \cdot (b.y - c.y) + \dots) / d \\
-\text{in\_circle} &= |p - \text{circum}|^2 \le r^2
+\text{in-circle} &= |p - \text{circum}|^2 \le r^2
 \end{aligned}
 $$
 
@@ -710,8 +710,8 @@ The 16 lookup cases are symmetric: 1 fully-inside, 1 fully-outside, and 14 bound
 ## 22. Isometric Projection
 $$
 \begin{aligned}
-\text{screen\_x} &= (\text{world\_x} - \text{world\_y}) \times \frac{\text{tile\_w}}{2} \\
-\text{screen\_y} &= (\text{world\_x} + \text{world\_y}) \times \frac{\text{tile\_h}}{2} - \text{elevation} \times h_{\text{scale}}
+\text{screen-x} &= (\text{world-x} - \text{world-y}) \times \frac{\text{tile-w}}{2} \\
+\text{screen-y} &= (\text{world-x} + \text{world-y}) \times \frac{\text{tile-h}}{2} - \text{elevation} \times h_{\text{scale}}
 \end{aligned}
 $$
 A 2.5D projection where $x$ and $y$ axes are foreshortened equally at $30^\circ$ from horizontal.
@@ -721,7 +721,7 @@ A 2.5D projection where $x$ and $y$ axes are foreshortened equally at $30^\circ$
 ## 23. Fractals
 
 ### Mandelbrot Set
-Iterate $z = z^2 + c$ until $|z|^2 > 4$. The set is $c$ values for which $z$ remains bounded. Iteration count maps to color.
+Iterate $z = z^2 + c$ until $|z|^2 \gt 4$. The set is $c$ values for which $z$ remains bounded. Iteration count maps to color.
 
 ### Julia Set
 Same iteration, but $c$ is fixed and $z$ starts from the pixel coordinate. The shape depends on the $c$ parameter.
@@ -789,7 +789,7 @@ t = \frac{(A - O) \times (B - A)}{D \times (B - A)},\quad
 u = \frac{(A - O) \times D}{D \times (B - A)}
 $$
 
-Intersection valid when $t > 0$ and $0 \le u \le 1$.
+Intersection valid when $t \gt 0$ and $0 \le u \le 1$.
 
 ### Visibility Polygon (FOV)
 
@@ -800,7 +800,7 @@ Sort all obstacle endpoints by angle from the light source. Cast rays at each an
 For tile maps, DDA traversal accumulates opacity along each ray. If cumulative opacity exceeds a threshold, cells beyond are shadowed:
 
 $$
-\text{brightness} = \max(0,\; 1 - \Sigma\;\text{tile\_opacity})
+\text{brightness} = \max(0,\; 1 - \Sigma\;\text{tile-opacity})
 $$
 
 Light intensity falls off with distance:
@@ -816,7 +816,7 @@ $$
 $$
 \begin{aligned}
 v &\mathrel{+}= g \cdot dt \quad (\text{gravity}) \\
-v &\mathrel{+}= \text{random\_jitter} \quad (\text{turbulence}) \\
+v &\mathrel{+}= \text{random-jitter} \quad (\text{turbulence}) \\
 p &\mathrel{+}= v \cdot dt \\
 \text{life} &\mathrel{-}= dt
 \end{aligned}
@@ -825,7 +825,7 @@ $$
 ### Burst Emission
 A burst spawns $n$ particles at position $(x,y)$ with:
 - Velocity: random direction $\times$ speed
-- Lifetime: uniform random in $[\text{min\_life}, \text{max\_life}]$
+- Lifetime: uniform random in $[\text{min-life}, \text{max-life}]$
 - Color: random from palette, interpolated over lifetime
 
 Trail particles are spawned each frame with reduced lifetime and opacity.
@@ -849,7 +849,7 @@ Pixels on the wiped side use the destination frame; pixels on the other side use
 ### Checkerboard
 $$
 \text{choice} = \begin{cases}
-\text{dst} & \text{if } (\lfloor x/s \rfloor + \lfloor y/s \rfloor) \bmod 2 < t \cdot 2 \\
+\text{dst} & \text{if } (\lfloor x/s \rfloor + \lfloor y/s \rfloor) \bmod 2 \lt t \cdot 2 \\
 \text{src} & \text{otherwise}
 \end{cases}
 $$
@@ -858,7 +858,7 @@ Where $s = \text{tile size}$. As $t$ increases, more checker cells flip from sou
 ### PixelDissolve
 Each pixel flips from source to destination when its random threshold is exceeded:
 $$
-\text{if } \text{rand}(x,y) < t:\; \text{dst},\; \text{else } \text{src}
+\text{if } \text{rand}(x,y) \lt t:\; \text{dst},\; \text{else } \text{src}
 $$
 The random map is pre-computed per transition instance.
 
@@ -880,7 +880,7 @@ The random map is pre-computed per transition instance.
 - **elastic** — damped oscillation with a base-2 exponential envelope
 - **linear** — identity, for tweening without easing
 
-The `_out` forms are typically composed as $1 - f(1-t)$, and `_in_out` as $f(2t)/2$ for $t < 0.5$ and $1 - f(2-2t)/2$ otherwise. All are exposed through the `EASING` name dict for string lookup.
+The `_out` forms are typically composed as $1 - f(1-t)$, and `_in_out` as $f(2t)/2$ for $t \lt 0.5$ and $1 - f(2-2t)/2$ otherwise. All are exposed through the `EASING` name dict for string lookup.
 
 ---
 
@@ -952,7 +952,7 @@ Small numerical helpers shared by scene-authoring code, camera smoothing, and `f
 | `bounce(t, period, offset, lo, hi)` | $lo + (hi{-}lo)\big(1 - \|2\cdot\text{frac}{\frac{t}{p}} - 1\|\big)$ | Triangle wave |
 | `approach(v, t, step)` | step toward `t` without overshoot | Eased setpoint |
 | `move_toward(v, t, step)` | alias of `approach` | Same |
-| `in_bounds(x, y, w, h)` | $0 \le x < w$ and $0 \le y < h$ | Cell bounds check |
+| `in_bounds(x, y, w, h)` | $0 \le x \lt w$ and $0 \le y \lt h$ | Cell bounds check |
 | `dist(ax, ay, bx, by)` | $\sqrt{(ax-bx)^2 + (ay-by)^2}$ | Euclidean distance |
 | `lerp_color(c1, c2, t)` | per-channel `int(lerp)`; `None` propagates the other color | Channel-blend colors |
 | `smoothstep(t)` | $t^2(3 - 2t)$ | Hermite easing `0→1` |
