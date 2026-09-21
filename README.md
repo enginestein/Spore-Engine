@@ -2,6 +2,12 @@
 
 A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3D rendering, physics, fluid simulation, procedural generation, cellular automata, ray tracing, and 125 demo scenes — all in pure Python with no external dependencies. Also includes image/video/GIF to ASCII conversion via ffmpeg or PIL, plus a **glyph art** module that converts media to copyable plain-text ASCII.
 
+## Demo
+
+<video src="demo.mp4" controls width="100%"></video>
+
+Terminal capture of the interactive scene demos, straight from `demo.py`.
+
 ## Feature Highlights
 
 | Subsystem | Key Components |
