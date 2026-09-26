@@ -1,7 +1,6 @@
 from __future__ import annotations
-import math
 from ..core.canvas import Canvas
-from ..core.color import Color, WHITE, DIM, BLACK
+from ..core.color import Color, WHITE
 
 
 class IsoTile:

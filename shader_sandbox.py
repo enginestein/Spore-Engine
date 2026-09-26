@@ -15,7 +15,8 @@ Controls:
 """
 
 import sys, os, time, math, random, select, tty, termios
-from typing import Optional, Callable
+from typing import Optional
+from collections.abc import Callable
 
 from spore_engine import Canvas, Color, DIM
 from spore_engine.core.color import Gradient
@@ -29,8 +30,7 @@ from spore_engine.fx.shaders import (
 from spore_engine.fx.effects import plasma, fire, starfield
 from spore_engine.sim.noise import PerlinNoise
 from spore_engine.sim.cellular import ReactionDiffusion
-from spore_engine.gen.fractals import Mandelbrot, BurningShip
-from spore_engine.gen.fractals import NewtonFractal, BarnsleyFern
+from spore_engine.gen.fractals import Mandelbrot, BurningShip, NewtonFractal, BarnsleyFern
 
 # -------------------------------------------------------------------
 # SHADER REGISTRY - metadata for auto-generated controls
@@ -55,7 +55,7 @@ class ParamDef:
         """Map slider 0-1 -> param value."""
         v = self.min + slider * (self.max - self.min)
         if self.integer:
-            return int(round(v / self.step)) * self.step
+            return round(v / self.step) * self.step
         return round(v / self.step) * self.step
 
 
@@ -142,14 +142,14 @@ SHADER_REGISTRY: list[ShaderDef] = [
 class SourceState:
     """Per-source persistent state."""
     def __init__(self):
-        self.fire_buffer: Optional[list[list[float]]] = None
+        self.fire_buffer: list[list[float]] | None = None
         self.stars: list[list[float]] = []
-        self.noise: Optional[PerlinNoise] = None
-        self.rd: Optional[ReactionDiffusion] = None
-        self.mandel: Optional[Mandelbrot] = None
-        self.burning: Optional[BurningShip] = None
-        self.newton: Optional[NewtonFractal] = None
-        self.fern: Optional[BarnsleyFern] = None
+        self.noise: PerlinNoise | None = None
+        self.rd: ReactionDiffusion | None = None
+        self.mandel: Mandelbrot | None = None
+        self.burning: BurningShip | None = None
+        self.newton: NewtonFractal | None = None
+        self.fern: BarnsleyFern | None = None
 
 
 def src_plasma(c: Canvas, t: float, dt: float, ss: SourceState):
@@ -382,12 +382,12 @@ class ShaderSandbox:
         cw = self.term_w - self.term_w * 3 // 5 - 2
         return max(30, min(45, cw))
 
-    def get_focused_shader(self) -> Optional[PipelineEntry]:
+    def get_focused_shader(self) -> PipelineEntry | None:
         if self.section == 1 and self.pipeline and 0 <= self.focus_idx < len(self.pipeline):
             return self.pipeline[self.focus_idx]
         return None
 
-    def get_focused_shader_by_section2(self) -> Optional[PipelineEntry]:
+    def get_focused_shader_by_section2(self) -> PipelineEntry | None:
         if self.pipeline and 0 <= self.focus_idx < len(self.pipeline):
             return self.pipeline[self.focus_idx]
         return None
@@ -710,7 +710,7 @@ _KEYS = {
 }
 
 
-def _read_key(timeout: float = 0.01) -> Optional[str]:
+def _read_key(timeout: float = 0.01) -> str | None:
     if not select.select([sys.stdin], [], [], timeout)[0]:
         return None
     ch = os.read(sys.stdin.fileno(), 1).decode('utf-8', errors='replace')

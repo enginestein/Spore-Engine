@@ -15,7 +15,9 @@ def scene_erosion(c, hr, t, pt, dt):
 
     s = _ES
     sim = s['sim']
-    sim.w, sim.h = w, h
+    # Must go through resize(): assigning sim.w/sim.h alone left the grids at
+    # their old dimensions and every accessor then indexed out of range.
+    sim.resize(w, h)
 
     phase = int(t / 12) % 3
 

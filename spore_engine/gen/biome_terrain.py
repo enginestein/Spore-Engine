@@ -1,5 +1,4 @@
 from __future__ import annotations
-import math, random
 from ..core.canvas import Canvas
 from ..core.color import Color, Gradient
 from ..sim.noise import PerlinNoise

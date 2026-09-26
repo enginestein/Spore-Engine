@@ -34,7 +34,7 @@ No two subpackages export the same identifier with different meanings;
 ``tests/test_api.py`` asserts this invariant.
 """
 
-from spore_engine.core import (Color, Gradient, PALETTES,
+from spore_engine.core import (Color, Gradient, PALETTES, fast_color,
     BLACK, RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, WHITE,
     ORANGE, PURPLE, PINK, DIM,
     Vec2, Vec3, Mat4,
@@ -53,7 +53,7 @@ from spore_engine.core import (Color, Gradient, PALETTES,
     approach, move_toward, bounce, dist, lerp_color,
     smoothstep, ramp_color)
 
-from spore_engine.core import (Assets, assets, load_sprite, load_palette,
+from spore_engine.core import (Assets, assets, default_store, load_sprite, load_palette,
      load_model, load_text,
      Component, EcsEntity, World, System, Transform,
      SpriteComponent, SpriteRenderSystem)
@@ -76,9 +76,12 @@ from spore_engine.fx import (plasma, fire, starfield, matrix_rain,
     WaveDistort, SwirlDistort, KuwaharaFilter,
     Posterize, Solarize, CelShade, HeatHaze, Emboss,
     PixelSort, Crystallize, ASCIIRemap, ChannelShift,
-    Kaleidoscope, Warp, VHSGlitch, Ripple)
+    Kaleidoscope, Warp, VHSGlitch, Ripple,
+    Field, Image, StarField, CellCache, to_cells)
 
-from spore_engine.render3d import (Mesh3D,
+from spore_engine.render3d import (Mesh3D, Camera3D,
+    DrawCall, Entity3D, FuncRenderer, Light3D, Material, MeshRenderer,
+    Renderer, Scene3D,
     render_mesh_wireframe, render_mesh_solid,
     RayScene, Sphere, Plane,
     VoxelScene,
@@ -148,3 +151,16 @@ from spore_engine.media import (ImageConverter,
     Video, VideoFrame, FramePlayer,
     make_test_video, make_color_bars, make_spinning_donut_video,
     image_to_canvas, video_to_ascii, video_to_player, ScreenRecorder)
+
+# Terminal lifecycle, scene state and asset error types are part of the
+# documented top-level surface: an application that drives the engine itself
+# needs a session and a scene store, and callers need to catch asset errors
+# without reaching into core.
+from spore_engine.core import (TerminalSession, RawMode, SceneStateStore,
+                               detect_color_depth, terminal_size, is_tty,
+                               monotonic, posix_terminal_available,
+                               HAVE_POSIX_TERMIOS, HAVE_TERMIOS,
+                               AssetError, AssetNotFoundError,
+                               UnsupportedAssetError, AssetParseError)
+
+from spore_engine.__version__ import __version__

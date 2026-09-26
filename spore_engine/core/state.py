@@ -1,5 +1,17 @@
 from __future__ import annotations
+
 from typing import Any
+
+__all__ = [
+    'SceneState',
+    'SceneStateStore',
+    'clear_scene_states',
+    'list_scene_states',
+    'scene_state',
+]
+
+#: Attribute names exposed as read-only properties on SceneState.
+_READONLY = frozenset({'name', 't'})
 
 
 class SceneState:
@@ -41,6 +53,14 @@ class SceneState:
     def __setattr__(self, key: str, value: Any) -> None:
         if key.startswith('_'):
             object.__setattr__(self, key, value)
+        elif key in _READONLY:
+            # 'name' and 't' are read-only properties. Without this branch an
+            # assignment silently succeeded, landed in _d, and was then
+            # unreachable - st.t = 0.0 left st.t unchanged but st.get('t')
+            # returning the assigned value.
+            raise AttributeError(
+                f'{type(self).__name__}.{key} is read-only; '
+                f'write to st[{key!r}] or st.setdefault({key!r}, ...) instead')
         else:
             self._d[key] = value
 
@@ -90,22 +110,75 @@ class SceneState:
         return f'SceneState({self._name!r}, {len(self._d)} keys)'
 
 
-_states: dict[str, SceneState] = {}
+class SceneStateStore:
+    """A named collection of :class:`SceneState` objects.
+
+    The module-level :func:`scene_state` helper uses one shared default store,
+    which is convenient for single-engine scripts. For anything long-lived -
+    two engines in one process, a test suite, a server hosting several scenes -
+    create your own store and pass it around instead, so one scene's state can
+    never leak into another's.
+
+        store = SceneStateStore()
+        st = store.get('fireflies')
+    """
+
+    def __init__(self):
+        self._states: dict = {}
+
+    def get(self, name: str) -> SceneState:
+        """Fetch (or create) the state registered under ``name``."""
+        st = self._states.get(name)
+        if st is None:
+            st = SceneState(name)
+            self._states[name] = st
+        return st
+
+    def clear(self) -> None:
+        """Drop every state in this store."""
+        self._states.clear()
+
+    def names(self) -> list:
+        """The names currently registered, in insertion order."""
+        return list(self._states)
+
+    def __len__(self) -> int:
+        return len(self._states)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._states
+
+    def __repr__(self) -> str:
+        return f'SceneStateStore({len(self._states)} states)'
 
 
-def scene_state(name: str = '') -> SceneState:
-    """Return the stable SceneState for a scene name (auto-created)."""
-    st = _states.get(name)
-    if st is None:
-        st = SceneState(name)
-        _states[name] = st
-    return st
+#: Shared default store used by the module-level helpers.
+default_store = SceneStateStore()
+
+
+def scene_state(name: str | None = None) -> SceneState:
+    """Return the stable :class:`SceneState` for ``name`` (auto-created).
+
+    ``name`` is required on purpose. The old signature defaulted to ``''``,
+    which meant *every* caller that forgot the name silently shared one object
+    process-wide - two independent engines would then read and write each
+    other's state. If you genuinely want one shared unnamed state, say so
+    explicitly with ``scene_state('')``.
+    """
+    if name is None:
+        raise TypeError(
+            'scene_state() needs a name; pass scene_state("my-scene"). '
+            'Omitting it used to alias every caller to one shared global.')
+    return default_store.get(name)
 
 
 def clear_scene_states() -> None:
-    """Drop all registered scene state (e.g. between scene switches)."""
-    _states.clear()
+    """Drop all state in the shared default store (e.g. between scene
+    switches). Prefer a private :class:`SceneStateStore` when you need
+    isolation."""
+    default_store.clear()
 
 
-def list_scene_states() -> list[str]:
-    return list(_states.keys())
+def list_scene_states() -> list:
+    """Names registered in the shared default store."""
+    return default_store.names()

@@ -40,7 +40,9 @@ def scene_underwater(c, hr, t, pt, dt):
             caustic = math.sin(x*0.1+t*1.5)*math.sin(y*0.08+t*1.2)*0.5+0.5
             c.set_pixel(x, y, ' ', bg=col.mul(0.8+0.2*caustic), z=-100)
 
-    light_w = int(w * 0.08)
+    # At least 1: int(w * 0.08) is 0 for any canvas narrower than 13
+    # columns, and the Gaussian below divides by this.
+    light_w = max(1, int(w * 0.08))
     for lx in range(w):
         lf = math.exp(-((lx-w/2)/light_w)**2) * 0.3
         for ly in range(int(h*0.15)):

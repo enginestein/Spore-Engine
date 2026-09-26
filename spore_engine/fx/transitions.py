@@ -1,10 +1,9 @@
 from __future__ import annotations
 import math
 import random
-from typing import Optional
 from ..core.canvas import Canvas
-from ..core.color import Color, BLACK
 
+from ..core.color import Color, BLACK  # noqa: F401  (re-exported for the subpackage API)
 class Transition:
     def apply(self, dst: Canvas, src: Canvas, t: float):
         raise NotImplementedError
@@ -26,9 +25,7 @@ class Fade(Transition):
                         dc.bg = sc.bg.blend(dc.bg, t)
                     else:
                         dc.bg = sc.bg
-                if t > 0.5:
-                    dc.char = dc.char
-                else:
+                if t <= 0.5:
                     dc.char = sc.char
 
 class Wipe(Transition):
@@ -49,7 +46,7 @@ class Wipe(Transition):
         elif self.direction == 'left':
             split = int((1 - t) * w)
             for y in range(h):
-                for x in range(0, split):
+                for x in range(split):
                     dst.set_pixel(x, y, src.buffer[y][x].char, 
                                  src.buffer[y][x].fg, src.buffer[y][x].bg)
         elif self.direction == 'down':
@@ -61,7 +58,7 @@ class Wipe(Transition):
         elif self.direction == 'up':
             split = int((1 - t) * h)
             for x in range(w):
-                for y in range(0, split):
+                for y in range(split):
                     dst.set_pixel(x, y, src.buffer[y][x].char, 
                                  src.buffer[y][x].fg, src.buffer[y][x].bg)
 
@@ -100,7 +97,7 @@ class PixelDissolve(Transition):
         t = max(0, min(1, t))
         w, h = min(dst.w, src.w), min(dst.h, src.h)
         
-        rng = random.Random(self.seed)
+        random.Random(self.seed)
         # This is expensive if we re-generate every time.
         # In a real engine we might pre-calculate the order.
         

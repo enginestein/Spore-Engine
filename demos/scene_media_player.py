@@ -72,7 +72,11 @@ def scene_media_player(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
                     info = f'{s["img_name"][:20]} | {s["player"]._idx + 1}/{s["player"].frame_count}'
                     c.draw_text(2, h - 1, info, Color(100, 100, 130), z=10)
             else:
-                if s['img_canvas'] is None or s.get('last_file') != fp:
+                # Rebuild on a resize too: the decoded canvas is sized to the
+                # terminal at decode time, so a resize left it the old shape
+                # and the blit below ran off the end of it.
+                if (s['img_canvas'] is None or s.get('last_file') != fp
+                        or s['img_canvas'].w != w or s['img_canvas'].h != h):
                     s['msg'] = f'Loading {name}...'
                     try:
                         s['img_canvas'] = image_to_canvas(fp, w, h, color=True)
@@ -83,9 +87,10 @@ def scene_media_player(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
                         s['msg'] = f'Error: {e}'
                         s['img_canvas'] = None
                 if s['img_canvas']:
-                    for y2 in range(h):
-                        for x2 in range(w):
-                            cc = s['img_canvas'].buffer[y2][x2]
+                    img = s['img_canvas']
+                    for y2 in range(min(h, img.h)):
+                        for x2 in range(min(w, img.w)):
+                            cc = img.buffer[y2][x2]
                             if cc.char != ' ' or cc.fg:
                                 c.set_pixel(x2, y2, cc.char, cc.fg, cc.bg, cc.z)
                     c.draw_text(2, h - 1, s['img_name'][:30], Color(100, 100, 130), z=10)

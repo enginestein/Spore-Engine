@@ -1,15 +1,14 @@
 from __future__ import annotations
 import math
-from typing import Optional
 from ..core.canvas import Canvas
 from ..core.color import Color
 from ..core.geom import Vec2
 
 
 class Bone:
-    __slots__ = ('length', 'angle', 'pos', 'color', 'children')
+    __slots__ = ('angle', 'children', 'color', 'length', 'pos')
     def __init__(self, length: float, angle: float = 0, pos: Vec2 = Vec2(),
-                 color: Optional[Color] = None):
+                 color: Color | None = None):
         self.length = length
         self.angle = angle
         self.pos = pos
@@ -37,7 +36,7 @@ class Bone:
 
 
 class Skeleton:
-    def __init__(self, root: Optional[Bone] = None):
+    def __init__(self, root: Bone | None = None):
         self.root = root or Bone(0)
         self._solve_positions: list[Vec2] = []
 
@@ -110,7 +109,6 @@ class Skeleton:
             return
 
         end_effector = chain[-1].end_pos if len(chain) > 1 else chain[0].end_pos
-        root_angle = chain[0].angle
 
         for _ in range(max_iterations):
             end_effector = chain[-1].end_pos
@@ -126,7 +124,6 @@ class Skeleton:
                     diff -= 2 * math.pi * (1 if diff > 0 else -1)
                 chain[i].angle += diff * 0.5
 
-                pos = chain[0].pos
                 for j in range(1, len(chain)):
                     chain[j].pos = chain[j - 1].end_pos
 
@@ -164,7 +161,7 @@ class Skeleton:
 
 
 def create_arm(base_x: float, base_y: float, segments: int = 3,
-               segment_length: float = 3, color: Optional[Color] = None) -> Skeleton:
+               segment_length: float = 3, color: Color | None = None) -> Skeleton:
     col = color or Color(220, 180, 120)
     root = Bone(0, 0, Vec2(base_x, base_y), col)
     prev = root
@@ -176,7 +173,7 @@ def create_arm(base_x: float, base_y: float, segments: int = 3,
 
 
 def create_leg(base_x: float, base_y: float, segments: int = 2,
-               segment_length: float = 2.5, color: Optional[Color] = None) -> Skeleton:
+               segment_length: float = 2.5, color: Color | None = None) -> Skeleton:
     col = color or Color(200, 160, 100)
     root = Bone(0, 0, Vec2(base_x, base_y), col)
     prev = root
@@ -188,7 +185,7 @@ def create_leg(base_x: float, base_y: float, segments: int = 2,
 
 
 def create_tentacle(base_x: float, base_y: float, segments: int = 8,
-                    segment_length: float = 1.5, color: Optional[Color] = None) -> Skeleton:
+                    segment_length: float = 1.5, color: Color | None = None) -> Skeleton:
     col = color or Color(100, 200, 180)
     root = Bone(0, 0, Vec2(base_x, base_y), col)
     prev = root

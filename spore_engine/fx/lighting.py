@@ -1,7 +1,6 @@
 from __future__ import annotations
 import math
-from typing import Optional
-from ..core.color import Color, BLACK, WHITE
+from ..core.color import Color, WHITE
 from ..core.canvas import Canvas, SHADE_CHARS
 
 
@@ -95,28 +94,42 @@ class LightManager:
         return light
 
     def render_to_canvas(self, canvas: Canvas, z: float = 0):
+        """Modulate each cell's colour by the lights falling on it.
+
+        Every lit channel is accumulated and used. The previous version
+        computed the green and blue averages and then threw them away, and
+        scaled red by ``avg / (avg + ambient)``, which darkened every lit cell
+        towards black as ambient rose and threw away the light's hue entirely -
+        a red torch and a blue torch produced identical output.
+        """
         for y in range(canvas.h):
             for x in range(canvas.w):
                 total_r, total_g, total_b = 0, 0, 0
-                weight = 0
+                weight = 0.0
                 for light in self.lights:
-                    dx = x - light.x
-                    dy = y - light.y
-                    dist = math.hypot(dx, dy)
+                    dist = math.hypot(x - light.x, y - light.y)
                     f = light.falloff(dist)
                     if f > 0:
                         total_r += light.color.r * f
                         total_g += light.color.g * f
                         total_b += light.color.b * f
                         weight += f
-                if weight > 0:
-                    avg_r = min(255, int(total_r / weight))
-                    avg_g = min(255, int(total_g / weight))
-                    avg_b = min(255, int(total_b / weight))
-                    cell = canvas.buffer[y][x]
-                    if cell.fg:
-                        r = min(255, int(cell.fg.r * avg_r / max(1, avg_r + self.ambient.r)))
-                        cell.fg = Color(r, r, r)
+                if weight <= 0:
+                    continue
+                cell = canvas.buffer[y][x]
+                if not cell.fg:
+                    continue
+                # Each channel is its own weighted average, so a strong red
+                # light and a strong blue one differ.
+                lr = min(255, total_r / weight)
+                lg = min(255, total_g / weight)
+                lb = min(255, total_b / weight)
+                # Modulate: ambient is the floor, the light scales it up.
+                cell.fg = Color(
+                    min(255, int(cell.fg.r * (lr + self.ambient.r) / 255)),
+                    min(255, int(cell.fg.g * (lg + self.ambient.g) / 255)),
+                    min(255, int(cell.fg.b * (lb + self.ambient.b) / 255)),
+                )
 
     def shade_char(self, intensity: float) -> str:
         if intensity <= 0:
@@ -127,8 +140,8 @@ class LightManager:
 
 def render_shadows(canvas: Canvas, light_x: float, light_y: float,
                    radius: float, solid_fn, z: float = 0,
-                   wall_color: Optional[Color] = None,
-                   bg_color: Optional[Color] = None):
+                   wall_color: Color | None = None,
+                   bg_color: Color | None = None):
     wc = wall_color or Color(60, 60, 80)
     bc = bg_color or Color(8, 6, 18)
     for y in range(canvas.h):

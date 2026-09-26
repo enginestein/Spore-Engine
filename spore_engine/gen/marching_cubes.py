@@ -1,6 +1,4 @@
 from __future__ import annotations
-import math
-from typing import Optional
 from ..core.geom import Vec3
 from ..core.color import Color
 from ..render3d.engine3d import Mesh3D
@@ -326,7 +324,7 @@ CORNER_OFFSETS = [
 
 
 def marching_cubes(grid: list[list[list[float]]], iso_level: float = 0,
-                   color: Optional[Color] = None) -> Mesh3D:
+                   color: Color | None = None) -> Mesh3D:
     mesh = Mesh3D('marching_cubes')
     mesh.face_colors = []
     fc = color or Color(180, 100, 200)

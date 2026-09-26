@@ -1,11 +1,13 @@
 """Convert a 2D image into a 3D heightfield mesh and render as ASCII."""
 from __future__ import annotations
-import math, os
-from typing import Optional
+import math
+import os
 from ..render3d.engine3d import Mesh3D, render_mesh_solid
 from ..core.geom import Vec3, Mat4
 from ..core.color import Color
 from ..core.canvas import Canvas, HiResCanvas
+from ..core._optional import pillow
+from ._pillow_compat import flat_pixels
 
 
 def image_to_heightfield(path: str,
@@ -17,21 +19,22 @@ def image_to_heightfield(path: str,
     Brighter pixels -> higher elevation.  Face colours come from the
     original image so you get both shape and colour.
     """
-    from PIL import Image
-    img = Image.open(path).convert('RGBA')
+    Image = pillow('image_to_mesh')
+    with Image.open(path) as src:
+        img = src.convert('RGBA')
     iw, ih = img.size
     aspect = ih / iw
     out_h = max(4, int(grid_w * aspect * 0.7))
     img_small = img.resize((grid_w, out_h), Image.LANCZOS)
-    pixels = list(img_small.getdata())
+    pixels = flat_pixels(img_small)
     w, h = grid_w, out_h
 
     mesh = Mesh3D(f'heightfield({os.path.basename(path)})')
     verts: list[Vec3] = []
     colors: list[list[Color]] = [[Color(0, 0, 0) for _ in range(w)] for _ in range(h)]
 
-    cell_w = base_width / w
-    cell_h = base_width / h * 0.7
+    base_width / w
+    base_width / h * 0.7
 
     for row in range(h):
         for col in range(w):
@@ -165,7 +168,9 @@ def render_mesh_onscreen(c: Canvas, hr: HiResCanvas, mesh: Mesh3D, t: float,
     center = Vec3(0, 0, 0)
     up = Vec3(0, 1, 0)
     view = Mat4.look_at(eye, center, up)
-    proj = Mat4.perspective(45, hr.w / hr.h, 0.1, 50)
+    # Mat4.perspective takes radians; passing 45 raised 'fov must be in (0, pi)'
+    # on every call, so this function could never render anything.
+    proj = Mat4.perspective(math.radians(45), hr.w / hr.h, 0.1, 50)
     light = Vec3(1, 2, 1).norm()
     hr.clear()
     render_mesh_solid(hr, mesh, view, proj, light)
@@ -174,7 +179,7 @@ def render_mesh_onscreen(c: Canvas, hr: HiResCanvas, mesh: Mesh3D, t: float,
 
 def make_test_pattern() -> str:
     """Generate a synthetic face-like image and return its temp path."""
-    from PIL import Image, ImageDraw
+    Image, ImageDraw = pillow('make_test_pattern', 'ImageDraw')
     w, h = 100, 120
     img = Image.new('RGB', (w, h), (10, 10, 30))
     draw = ImageDraw.Draw(img)

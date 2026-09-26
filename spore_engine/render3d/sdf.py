@@ -1,8 +1,8 @@
 from __future__ import annotations
 import math
-from typing import Callable, Optional
+from collections.abc import Callable
 from ..core.geom import Vec3
-from ..core.color import Color, Gradient
+from ..core.color import Color
 from ..core.canvas import Canvas
 
 
@@ -120,7 +120,9 @@ class SDFScene:
             d, hit_color, reflectivity, emissive = self._scene_sdf(pos)
             if d < self.epsilon:
                 n = self._normal(pos)
-                result = Color(emissive * 255, emissive * 255, emissive * 255)
+                # emissive is a 0-1 float; Color wants whole 0-255 channels.
+                glow = min(255, round(emissive * 255))
+                result = Color(glow, glow, glow)
                 for lpos, lcol, lint in self.lights:
                     light_dir = (lpos - pos).norm()
                     light_dist = pos.dist(lpos)

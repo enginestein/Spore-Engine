@@ -1,15 +1,24 @@
 from __future__ import annotations
-import math, random
-from typing import Optional
+import math
+import random
 from ..core.canvas import Canvas
 from ..core.color import Color
 from ..core.geom import Vec2
 
 
 class SteerAgent:
-    __slots__ = ('pos', 'vel', 'heading', 'max_speed', 'max_force',
-                 'mass', 'color', 'trail', 'trail_max')
-    def __init__(self, x: float = 0, y: float = 0, color: Optional[Color] = None):
+    __slots__ = (
+        'color',
+        'heading',
+        'mass',
+        'max_force',
+        'max_speed',
+        'pos',
+        'trail',
+        'trail_max',
+        'vel',
+    )
+    def __init__(self, x: float = 0, y: float = 0, color: Color | None = None):
         self.pos = Vec2(x, y)
         self.vel = Vec2(random.uniform(-1, 1), random.uniform(-1, 1))
         self.heading = Vec2(1, 0)
@@ -118,7 +127,7 @@ class SteerAgent:
         if not obstacles:
             return Vec2()
         ahead = self.pos + self.vel.norm() * look_ahead
-        ahead2 = self.pos + self.vel.norm() * look_ahead * 0.5
+        self.pos + self.vel.norm() * look_ahead * 0.5
         closest = None
         closest_d = float('inf')
         for obs in obstacles:
@@ -191,7 +200,7 @@ class SteerWorld:
         self.height = height
         self.wrap_mode = True
 
-    def add_agent(self, x: float, y: float, color: Optional[Color] = None) -> SteerAgent:
+    def add_agent(self, x: float, y: float, color: Color | None = None) -> SteerAgent:
         a = SteerAgent(x, y, color)
         self.agents.append(a)
         return a

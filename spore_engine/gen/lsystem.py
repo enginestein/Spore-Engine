@@ -1,7 +1,6 @@
 from __future__ import annotations
 import math
 import random
-from typing import Optional
 from ..core.canvas import Canvas
 from ..core.color import Color
 
@@ -16,7 +15,7 @@ class LSystem:
         self.start_angle = math.radians(start_angle)
         self.sentence = axiom
 
-    def generate(self, iterations: Optional[int] = None) -> str:
+    def generate(self, iterations: int | None = None) -> str:
         n = iterations if iterations is not None else self.iterations
         s = self.axiom
         for _ in range(n):
@@ -26,7 +25,7 @@ class LSystem:
 
     def render(self, canvas: Canvas, x: float = 0, y: float = 0,
                length: float = 3, t: float = 0,
-               color: Optional[Color] = None,
+               color: Color | None = None,
                thickness: int = 1, leaf_char: str = '*',
                stochastic: bool = False):
         col = color or Color(100, 200, 100)
@@ -51,9 +50,14 @@ class LSystem:
                 else:
                     depth = max(0, 1 - abs(ex - x) * 0.01 - abs(ey - y) * 0.01)
                     branch_color = col.lerp(Color(140, 100, 60), depth * 0.3)
-                    canvas.draw_line(round(cx), round(cy), round(ex), round(ey),
-                                     '#' if thickness > 1 else '#',
-                                     branch_color)
+                    # `thickness` used to be ignored here - the char was
+                    # written as `'#' if thickness > 1 else '#'`, so every
+                    # branch came out one cell wide no matter what the
+                    # caller asked for.
+                    canvas.draw_line_thick(round(cx), round(cy),
+                                           round(ex), round(ey),
+                                           thickness=thickness,
+                                           char='#', fg=branch_color)
                 cx, cy = ex, ey
             elif c == '+':
                 angle += self.angle

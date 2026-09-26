@@ -1,11 +1,12 @@
 from __future__ import annotations
 import math
-from typing import Optional
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color, Gradient
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 class Terrain:
@@ -47,7 +48,7 @@ class Terrain:
         return 0
 
     def render_topdown(self, canvas: Canvas, ox: int = 0, oy: int = 0,
-                       grad: Optional[Gradient] = None, t: float = 0):
+                       grad: Gradient | None = None, t: float = 0):
         g = grad or Gradient(
             Color(0, 40, 80), Color(50, 120, 50), Color(100, 180, 50),
             Color(160, 140, 40), Color(180, 120, 60), Color(200, 200, 200)
@@ -59,7 +60,7 @@ class Terrain:
                 canvas.set_pixel(x + ox, y + oy, SHADE[ci], g.at(h))
 
     def render_contour(self, canvas: Canvas, ox: int = 0, oy: int = 0,
-                       levels: int = 5, fg: Optional[Color] = None):
+                       levels: int = 5, fg: Color | None = None):
         col = fg or Color(150, 150, 100)
         for y in range(1, min(self.h, canvas.height - oy) - 1):
             for x in range(1, min(self.w, canvas.width - ox) - 1):
@@ -80,7 +81,7 @@ class Terrain:
         hw = min(self.w, canvas.width - ox)
         for x in range(hw):
             profile = [self.heightmap[y][x] for y in range(self.h)]
-            max_y = max(0, max(canvas.height - oy - 1, 0))
+            max(0, max(canvas.height - oy - 1, 0))
             for j, h in enumerate(profile):
                 py = oy + canvas.height - 1 - int(h * z_scale) - j
                 if py < oy or py >= oy + canvas.height:
@@ -128,7 +129,7 @@ def marching_squares(heightmap: list[list[float]], level: float = 0.5) -> list[l
             code = tl | (tr << 1) | (br << 2) | (bl << 3)
             if code == 0 or code == 15:
                 continue
-            cx, cy = x + 0.5, y + 0.5
+            _cx, _cy = x + 0.5, y + 0.5
             segs = {
                 1: [(x + 0.5, y + 1), (x + 1, y + 0.5)],
                 2: [(x + 1, y + 0.5), (x + 0.5, y)],

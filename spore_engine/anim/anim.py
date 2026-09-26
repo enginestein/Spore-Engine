@@ -1,6 +1,7 @@
 from __future__ import annotations
 import math
 
+from ..core.util import lerp as lerp, lerp_color as lerp_color
 # -- EASING FUNCTIONS ---------------------------------------------
 
 def linear(t: float) -> float:
@@ -157,7 +158,11 @@ class Tween:
 
     @property
     def value(self) -> float:
-        t = min(1, self.elapsed / self.duration) if self.duration > 0 else 1
+        # Clamp below as well as above: a negative elapsed is how a delay is
+        # expressed, and the easing functions are not defined there -- quad_in
+        # returned 0.25 and back_in -0.625, so a delayed tween jumped around
+        # during the delay instead of waiting.
+        t = max(0.0, min(1.0, self.elapsed / self.duration)) if self.duration > 0 else 1.0
         v = self.easing(t)
         return v if self.forward else (1 - v)
 
@@ -387,7 +392,6 @@ class PathFollower:
 # lerp_color); anim re-exports those same objects so the names never
 # drift between subpackages. lerp_tuple keeps a private clamped helper
 # so out-of-range t values interpolate safely.
-from ..core.util import lerp, lerp_color
 
 def _lerp_capped(a, b, t):
     return a + (b - a) * max(0, min(1, t))

@@ -51,7 +51,10 @@ def test_single_cell_change_is_batched_and_minimal():
 
 
 def test_bg_change_is_detected():
-    c = Canvas(10, 3)
+    # colour_depth is pinned because render_to otherwise detects from the
+    # target stream, and a StringIO is not a terminal - so it would correctly
+    # emit no colour at all and there would be nothing to diff.
+    c = Canvas(10, 3, color_depth=3)
     c.set_pixel(2, 1, ' ', bg=Color(10, 20, 30), z=0)
     _render(c)
     # same char, same fg, only the background colour flips
@@ -68,7 +71,7 @@ def test_clear_then_repaint_is_incremental():
     # the classic App/demo pattern: clear whole buffer, repaint it identically
     c.clear()
     c.fill_rect(0, 0, 20, 5, ' ', bg=Color(1, 2, 3), z=0)
-    out = _render(c)
+    _render(c)
     stats = c.render_stats
     assert stats['cells'] == 0, 'identical frame must not re-emit background'
     assert stats['full'] is False

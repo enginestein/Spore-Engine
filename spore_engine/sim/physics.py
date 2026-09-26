@@ -1,8 +1,31 @@
 from __future__ import annotations
 import math
-from typing import Optional
 from ..core.canvas import Canvas
-from ..core.color import Color, DIM
+from ..core.color import Color
+from ..core.geom import Vec2  # re-exported: the engine has one 2D vector
+
+__all__ = [
+    'AABB',
+    'DEFAULT_RESTITUTION',
+    'GRAVITY',
+    'Body',
+    'CompoundBody',
+    'DistanceJoint',
+    'EnhancedPhysicsWorld',
+    'ForceField',
+    'PhysicsWorld',
+    'PolyBody',
+    'RayCast',
+    'RectBody',
+    'RigidBody',
+    'Spring',
+    'Vec2',
+    'resolve_aabb',
+    'resolve_circle_aabb',
+    'resolve_circle_poly',
+    'resolve_poly_poly',
+    'sat_collide',
+]
 
 
 def _sanitize(v: float, fallback: float = 0) -> float:
@@ -13,29 +36,22 @@ GRAVITY = 9.8
 DEFAULT_RESTITUTION = 0.6
 
 
-class Vec2:
-    __slots__ = ('x', 'y')
-    def __init__(self, x: float = 0, y: float = 0):
-        self.x, self.y = x, y
-    def __add__(self, o: Vec2) -> Vec2: return Vec2(self.x + o.x, self.y + o.y)
-    def __sub__(self, o: Vec2) -> Vec2: return Vec2(self.x - o.x, self.y - o.y)
-    def __mul__(self, s: float) -> Vec2: return Vec2(self.x * s, self.y * s)
-    def __truediv__(self, s: float) -> Vec2: return Vec2(self.x / s, self.y / s) if s else Vec2()
-    def __neg__(self) -> Vec2: return Vec2(-self.x, -self.y)
-    def dot(self, o: Vec2) -> float: return self.x * o.x + self.y * o.y
-    def length(self) -> float: return math.hypot(self.x, self.y)
-    def length_sq(self) -> float: return self.x * self.x + self.y * self.y
-    def norm(self) -> Vec2:
-        l = self.length()
-        return Vec2(self.x / l, self.y / l) if l else Vec2()
-    def dist(self, o: Vec2) -> float: return (self - o).length()
-
-
 class Body:
-    __slots__ = ('pos', 'vel', 'mass', 'inv_mass', 'radius', 'color',
-                 'restitution', 'friction', 'locked', 'trail', 'trail_len')
+    __slots__ = (
+        'color',
+        'friction',
+        'inv_mass',
+        'locked',
+        'mass',
+        'pos',
+        'radius',
+        'restitution',
+        'trail',
+        'trail_len',
+        'vel',
+    )
     def __init__(self, x: float = 0, y: float = 0, radius: float = 1,
-                 mass: float = 1, color: Optional[Color] = None):
+                 mass: float = 1, color: Color | None = None):
         self.pos = Vec2(x, y)
         self.vel = Vec2(0, 0)
         self.mass = mass
@@ -89,7 +105,7 @@ class Body:
 
 
 class AABB:
-    __slots__ = ('x', 'y', 'w', 'h')
+    __slots__ = ('h', 'w', 'x', 'y')
     def __init__(self, x: float = 0, y: float = 0, w: float = 1, h: float = 1):
         self.x, self.y, self.w, self.h = x, y, w, h
 
@@ -125,10 +141,18 @@ class AABB:
 
 
 class RectBody:
-    __slots__ = ('aabb', 'vel', 'mass', 'inv_mass', 'color',
-                 'restitution', 'friction', 'locked')
+    __slots__ = (
+        'aabb',
+        'color',
+        'friction',
+        'inv_mass',
+        'locked',
+        'mass',
+        'restitution',
+        'vel',
+    )
     def __init__(self, x: float = 0, y: float = 0, w: float = 1, h: float = 1,
-                 mass: float = 1, color: Optional[Color] = None):
+                 mass: float = 1, color: Color | None = None):
         self.aabb = AABB(x, y, w, h)
         self.vel = Vec2(0, 0)
         self.mass = mass
@@ -143,7 +167,7 @@ class RectBody:
             self.vel.x += fx * self.inv_mass
             self.vel.y += fy * self.inv_mass
 
-    def update(self, dt: float, gravity: float = GRAVITY, bounds: Optional[AABB] = None):
+    def update(self, dt: float, gravity: float = GRAVITY, bounds: AABB | None = None):
         if self.locked:
             return
         self.vel.y += gravity * dt
@@ -236,7 +260,7 @@ class RayCast:
         self.end_x = ox + dx
         self.end_y = oy + dy
 
-    def intersect_circle(self, body: Body) -> Optional[tuple[float, float, float]]:
+    def intersect_circle(self, body: Body) -> tuple[float, float, float] | None:
         fx = self.end_x - self.ox
         fy = self.end_y - self.oy
         cx = body.pos.x - self.ox
@@ -257,7 +281,7 @@ class RayCast:
             return (self.ox + fx * t, self.oy + fy * t, t)
         return None
 
-    def render(self, canvas: Canvas, z: float = 0, fg: Optional[Color] = None):
+    def render(self, canvas: Canvas, z: float = 0, fg: Color | None = None):
         canvas.draw_line(round(self.ox), round(self.oy),
                          round(self.end_x), round(self.end_y), '.', fg, z=z)
 
@@ -265,7 +289,7 @@ class RayCast:
 class ForceField:
     def __init__(self, x: float, y: float, w: float, h: float,
                  fx: float = 0, fy: float = 0, strength: float = 1.0,
-                 color: Optional[Color] = None):
+                 color: Color | None = None):
         self.aabb = AABB(x, y, w, h)
         self.fx = fx
         self.fy = fy
@@ -309,7 +333,7 @@ class DistanceJoint:
 
 
 class Spring:
-    __slots__ = ('a', 'b', 'rest_length', 'stiffness', 'damping')
+    __slots__ = ('a', 'b', 'damping', 'rest_length', 'stiffness')
     def __init__(self, a: Body, b: Body, rest_length: float = -1,
                  stiffness: float = 100, damping: float = 2):
         self.a = a
@@ -402,7 +426,7 @@ class PhysicsWorld:
 
     @staticmethod
     def chain(world: PhysicsWorld, x: float, y: float, links: int = 10,
-              spacing: float = 2, radius: float = 0.5, color: Optional[Color] = None) -> list[Body]:
+              spacing: float = 2, radius: float = 0.5, color: Color | None = None) -> list[Body]:
         bodies = []
         c = color or Color(180, 200, 255)
         for i in range(links):
@@ -417,7 +441,7 @@ class PhysicsWorld:
 
     @staticmethod
     def cloth(world: PhysicsWorld, x: float, y: float, cols: int = 8, rows: int = 6,
-              spacing: float = 1.8, radius: float = 0.2, color: Optional[Color] = None) -> list[list[Body]]:
+              spacing: float = 1.8, radius: float = 0.2, color: Color | None = None) -> list[list[Body]]:
         c = color or Color(150, 200, 255)
         grid: list[list[Body]] = []
         for r in range(rows):
@@ -447,7 +471,7 @@ class PhysicsWorld:
 
 class RigidBody(Body):
     def __init__(self, x: float = 0, y: float = 0, radius: float = 1,
-                 mass: float = 1, color: Optional[Color] = None):
+                 mass: float = 1, color: Color | None = None):
         super().__init__(x, y, radius, mass, color)
         self.angle = 0.0
         self.ang_vel = 0.0
@@ -485,7 +509,7 @@ class RigidBody(Body):
 
 class PolyBody:
     def __init__(self, vertices: list[tuple[float, float]],
-                 mass: float = 1, color: Optional[Color] = None,
+                 mass: float = 1, color: Color | None = None,
                  pos: tuple[float, float] = (0, 0)):
         self._local_verts = list(vertices)
         self.verts: list[tuple[float, float]] = list(vertices)
@@ -532,8 +556,8 @@ class PolyBody:
     def _update_verts(self):
         c, s = math.cos(self.angle), math.sin(self.angle)
         self.verts = [
-            (self.pos.x + vx * c - vy * s,
-             self.pos.y + vx * s + vy * c)
+            (_sanitize(self.pos.x + vx * c - vy * s),
+             _sanitize(self.pos.y + vx * s + vy * c))
             for vx, vy in self._local_verts
         ]
 
@@ -561,9 +585,20 @@ class PolyBody:
         self.pos.y += self.vel.y * dt + self.ang_vel * self.vel.x * dt * 0.01
         self.angle += self.ang_vel * dt
         self.ang_vel *= (1 - self.friction * 0.05)
+        # The rigid-body integrator can diverge (a large impulse against a
+        # heavy stack, or a zero-mass pair) and produce inf/NaN. Without this
+        # the NaN survived into pos/angle, _update_verts() propagated it to
+        # the vertices, and render() then died on
+        # `round(nan) -> ValueError`. Body.update has always sanitised here.
+        self.pos.x = _sanitize(self.pos.x)
+        self.pos.y = _sanitize(self.pos.y)
+        self.vel.x = _sanitize(self.vel.x)
+        self.vel.y = _sanitize(self.vel.y)
+        self.ang_vel = _sanitize(self.ang_vel)
+        self.angle = _sanitize(self.angle)
         self._update_verts()
         if bounds_x > 0:
-            for i, (vx, vy) in enumerate(self.verts):
+            for _i, (vx, vy) in enumerate(self.verts):
                 if vx < 0:
                     self.pos.x += (0 - vx)
                     self.vel.x = -self.vel.x * self.restitution
@@ -576,6 +611,15 @@ class PolyBody:
                 elif vy >= bounds_y:
                     self.pos.y -= (vy - bounds_y + 1)
                     self.vel.y = -self.vel.y * self.restitution
+            # The loop above folds vertex positions back into pos/vel, so it
+            # can reintroduce a non-finite value after the sanitise earlier in
+            # this method. Re-clamp here, at the point the state is final.
+            self.pos.x = _sanitize(self.pos.x)
+            self.pos.y = _sanitize(self.pos.y)
+            self.vel.x = _sanitize(self.vel.x)
+            self.vel.y = _sanitize(self.vel.y)
+            self.ang_vel = _sanitize(self.ang_vel)
+            self.angle = _sanitize(self.angle)
             self._update_verts()
 
     def render(self, canvas: Canvas, z: float = 0):
@@ -598,7 +642,7 @@ class PolyBody:
         return best_v
 
 
-def sat_collide(a: PolyBody, b: PolyBody) -> Optional[tuple[float, float, float]]:
+def sat_collide(a: PolyBody, b: PolyBody) -> tuple[float, float, float] | None:
     axes: list[tuple[float, float]] = []
     for verts in (a.verts, b.verts):
         for i in range(len(verts)):
@@ -763,7 +807,7 @@ def resolve_circle_aabb(circle: Body, rect: RectBody):
 
 class CompoundBody:
     def __init__(self, x: float = 0, y: float = 0, mass: float = 1,
-                 color: Optional[Color] = None):
+                 color: Color | None = None):
         self.pos = Vec2(x, y)
         self.vel = Vec2(0, 0)
         self.angle = 0.0

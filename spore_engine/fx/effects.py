@@ -1,7 +1,6 @@
 from __future__ import annotations
 import math
 import random
-from typing import Optional
 from ..core.color import Color, Gradient, PALETTES
 from ..core.canvas import Canvas, SHADE_CHARS
 
@@ -106,7 +105,7 @@ class Emitter:
 
 class FountainEmitter(Emitter):
     def __init__(self, x: float, y: float, max_particles: int = 150,
-                 colors: Optional[list[Color]] = None):
+                 colors: list[Color] | None = None):
         super().__init__(x, y, max_particles)
         self.colors = colors or [Color(200, 220, 255), Color(180, 200, 255),
                                  Color(150, 180, 255), Color(255, 255, 255)]
@@ -128,7 +127,7 @@ class FountainEmitter(Emitter):
 
 class StreamEmitter(Emitter):
     def __init__(self, x: float, y: float, angle: float = -math.pi / 2,
-                 max_particles: int = 80, colors: Optional[list[Color]] = None):
+                 max_particles: int = 80, colors: list[Color] | None = None):
         super().__init__(x, y, max_particles)
         self.angle = angle
         self.spread = 0.3
@@ -167,7 +166,7 @@ class FireEmitter(Emitter):
 
 
 def burst_explosion(cx: float, cy: float, count: int = 40,
-                    colors: Optional[list[Color]] = None,
+                    colors: list[Color] | None = None,
                     speed: float = 4.0) -> list[Particle]:
     colors = colors or PALETTES['fire']
     parts = []
@@ -209,7 +208,7 @@ def burst_directional(cx: float, cy: float, angle: float, spread: float = 0.5,
 
 
 def plasma(canvas: Canvas, t: float, ox: int = 0, oy: int = 0,
-           w: Optional[int] = None, h: Optional[int] = None,
+           w: int | None = None, h: int | None = None,
            palette: str = 'neon', speed: float = 1):
     w = w or canvas.width
     h = h or canvas.height
@@ -228,7 +227,7 @@ def plasma(canvas: Canvas, t: float, ox: int = 0, oy: int = 0,
 
 
 def fire(canvas: Canvas, t: float, buffer: list[list[float]],
-         ox: int = 0, oy: int = 0, w: Optional[int] = None, h: Optional[int] = None):
+         ox: int = 0, oy: int = 0, w: int | None = None, h: int | None = None):
     buf_h = len(buffer)
     buf_w = len(buffer[0]) if buf_h else 0
     w = w or buf_w
@@ -265,7 +264,7 @@ def fire(canvas: Canvas, t: float, buffer: list[list[float]],
 
 class Burst:
     def __init__(self, cx: float, cy: float, count: int = 30,
-                 colors: Optional[list[Color]] = None):
+                 colors: list[Color] | None = None):
         self.cx = cx
         self.cy = cy
         self.alive = True
@@ -299,7 +298,7 @@ class ParticleSystem:
         self.max = max_particles
 
     def emit(self, cx: float, cy: float, count: int = 20,
-             colors: Optional[list[Color]] = None):
+             colors: list[Color] | None = None):
         if len(self.bursts) >= self.max // 20:
             self.bursts.pop(0)
         self.bursts.append(Burst(cx, cy, count, colors))
@@ -320,7 +319,7 @@ class ParticleSystem:
 
 
 def starfield(canvas: Canvas, t: float, stars: list[list[float]],
-              cx: Optional[float] = None, cy: Optional[float] = None,
+              cx: float | None = None, cy: float | None = None,
               speed: float = 1, count: int = 0):
     scx = cx if cx is not None else canvas.width // 2
     scy = cy if cy is not None else canvas.height // 2

@@ -1,6 +1,5 @@
 from __future__ import annotations
-import math, os
-from typing import Optional
+import os
 from ..core.geom import Vec3
 from ..core.color import Color
 from .engine3d import Mesh3D
@@ -17,7 +16,7 @@ def _parse_face(parts: list[str]) -> list[int]:
 
 
 def load_obj(filepath: str, scale: float = 1,
-             color: Optional[Color] = None) -> Optional[Mesh3D]:
+             color: Color | None = None) -> Mesh3D | None:
     if not os.path.exists(filepath):
         return None
     mesh = Mesh3D(os.path.basename(filepath))
@@ -25,7 +24,6 @@ def load_obj(filepath: str, scale: float = 1,
     normals: list[Vec3] = []
     mesh.face_colors = []
     fc = color or Color(180, 180, 200)
-    has_normals = False
 
     try:
         with open(filepath) as f:
@@ -46,7 +44,6 @@ def load_obj(filepath: str, scale: float = 1,
                 elif parts[0] == 'vn':
                     n = Vec3(float(parts[1]), float(parts[2]), float(parts[3]))
                     normals.append(n)
-                    has_normals = True
                 elif parts[0] == 'f':
                     idxs = _parse_face(parts[1:])
                     if len(idxs) >= 3:
@@ -79,15 +76,13 @@ def _compute_edges(faces: list[list[int]]) -> list[tuple[int, int]]:
 
 
 def load_ply(filepath: str, scale: float = 1,
-             color: Optional[Color] = None) -> Optional[Mesh3D]:
+             color: Color | None = None) -> Mesh3D | None:
     if not os.path.exists(filepath):
         return None
     mesh = Mesh3D(os.path.basename(filepath))
     fc = color or Color(180, 180, 200)
     verts: list[Vec3] = []
     faces: list[list[int]] = []
-    reading_verts = False
-    reading_faces = False
     vertex_count = 0
     face_count = 0
     vertex_idx = 0

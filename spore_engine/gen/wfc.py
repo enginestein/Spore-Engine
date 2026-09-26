@@ -1,15 +1,17 @@
 from __future__ import annotations
-import math, random
-from typing import Optional
+import math
+import random
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color, DIM
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 class WFCTile:
-    def __init__(self, char: str, fg: Optional[Color] = None, bg: Optional[Color] = None, name: str = ''):
+    def __init__(self, char: str, fg: Color | None = None, bg: Color | None = None, name: str = ''):
         self.char = char
         self.fg = fg
         self.bg = bg
@@ -32,7 +34,7 @@ class WFC:
         self.tile_map: dict[str, int] = {}
         self.grid: list[list[list[int]]] = []  # superposition per cell
         self.collapsed: list[list[bool]] = []
-        self.output: list[list[Optional[WFCTile]]] = []
+        self.output: list[list[WFCTile | None]] = []
         self._rng = random.Random()
 
     def add_tile(self, tile: WFCTile) -> int:
@@ -41,8 +43,8 @@ class WFC:
         self.tile_map[tile.name] = idx
         return idx
 
-    def add_tile_from_sample(self, char: str, fg: Optional[Color] = None,
-                              bg: Optional[Color] = None, name: str = '',
+    def add_tile_from_sample(self, char: str, fg: Color | None = None,
+                              bg: Color | None = None, name: str = '',
                               north: str = '', east: str = '', south: str = '',
                               west: str = '') -> int:
         t = WFCTile(char, fg, bg, name or char)
@@ -103,7 +105,7 @@ class WFC:
             r = self._rng.random() * total
             cumulative = 0
             chosen = opts[0]
-            for i, w in zip(opts, weights):
+            for i, w in zip(opts, weights, strict=False):
                 cumulative += w
                 if r <= cumulative:
                     chosen = i

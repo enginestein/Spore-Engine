@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional
 from .canvas import Cell, Canvas
 from .color import Color
 
@@ -11,8 +10,8 @@ class Sprite:
         self.height = len(data)
 
     @classmethod
-    def from_string(cls, text: str, fg: Optional[Color] = None,
-                    bg: Optional[Color] = None, scale: int = 1) -> Sprite:
+    def from_string(cls, text: str, fg: Color | None = None,
+                    bg: Color | None = None, scale: int = 1) -> Sprite:
         lines = text.rstrip('\n').split('\n')
         data = []
         for line in lines:
@@ -27,14 +26,14 @@ class Sprite:
         return cls(data)
 
     @classmethod
-    def from_file(cls, path: str, fg: Optional[Color] = None,
-                  bg: Optional[Color] = None) -> Sprite:
+    def from_file(cls, path: str, fg: Color | None = None,
+                  bg: Color | None = None) -> Sprite:
         with open(path) as f:
             return cls.from_string(f.read(), fg, bg)
 
     def blit_to(self, canvas: Canvas, x: int, y: int,
-                fg: Optional[Color] = None, bg: Optional[Color] = None,
-                z: float = 0, transparent: Optional[str] = ' ',
+                fg: Color | None = None, bg: Color | None = None,
+                z: float = 0, transparent: str | None = ' ',
                 scale: int = 1):
         for sy, row in enumerate(self.data):
             for sx, cell in enumerate(row):
@@ -52,5 +51,5 @@ class Sprite:
     def rotated(self, times: int = 1) -> Sprite:
         data = self.data
         for _ in range(times % 4):
-            data = [list(r) for r in zip(*data[::-1])]
+            data = [list(r) for r in zip(*data[::-1], strict=False)]
         return Sprite(data)

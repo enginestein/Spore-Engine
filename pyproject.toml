@@ -1,0 +1,209 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spore-engine"
+# Keep in sync with spore_engine/__version__.py; test_api.py asserts they match.
+version = "0.1.0"
+description = "A library-grade ASCII (text-mode) graphics engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Spore Engine Authors"}
+]
+keywords = ["ascii", "terminal", "text-mode", "graphics", "engine"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Environment :: Console",
+  "Topic :: Multimedia :: Graphics",
+  "Typing :: Typed",
+]
+# numpy is the one hard requirement. The gen/ and sim/ layers (noise, fluid,
+# powder, terrain) are written against ndarrays, and fx/ filters operate on
+# whole-channel arrays, so there is no meaningful pure-Python fallback.
+#
+# Everything else is genuinely optional and degrades at import time rather
+# than raising: numba and scipy fall back to a pure-Python/numpy path, and
+# Pillow is imported lazily inside the functions that need it. That keeps
+# `import spore_engine` working on a bare interpreter with just numpy.
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+# Image/video conversion and glyph art.
+media = ["pillow>=9.0.0"]
+# scipy.ndimage implementations of the box blur, glow and sobel filters.
+# Without it fx/ falls back to equivalent numpy code, which is slower but
+# numerically close enough for a terminal.
+fx = ["scipy>=1.7"]
+# numba JIT-compiles the noise and fluid kernels. Without it the same
+# functions run as plain Python: identical results, considerably slower.
+speed = ["numba>=0.55"]
+all = ["pillow>=9.0.0", "scipy>=1.7", "numba>=0.55"]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.4",
+  "mypy>=1.5",
+  "build>=1.0",
+  "pillow>=9.0.0",
+  "scipy>=1.7",
+  "numba>=0.55",
+]
+
+[project.urls]
+Homepage = "https://github.com/spore-engine/spore-engine"
+Changelog = "https://github.com/spore-engine/spore-engine/blob/main/CHANGELOG.md"
+
+[project.scripts]
+spore-demo = "demo:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["spore_engine*"]
+exclude = ["tests*", "demos*", "war*", "wiki*", "docs*", "examples*"]
+
+[tool.setuptools]
+py-modules = ["demo", "easy_demo", "shader_sandbox"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = [
+  "error",           # a warning in a library is a bug; fix it, do not hide it
+  "default::DeprecationWarning:spore_engine",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["spore_engine"]
+# The optional-dependency shims are exercised via monkeypatch in the tests.
+omit = []
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+# Floored per-package rather than globally: the whole tree includes large
+# optional-dependency surfaces (image/video conversion, 3D meshes) that cannot
+# be covered on a machine without pillow/numpy/ffmpeg. See .github/workflows/ci.yml,
+# which runs the full matrix and reports the real number.
+fail_under = 78
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "@overload",
+  "\\.\\.\\.",
+]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["."]
+# `war/` and `wiki/` are legacy side-trees, not the engine. They are excluded
+# from packaging and from linting; run them through a separate config if they
+# ever need to be maintained.
+extend-exclude = ["war", "wiki", "build", "dist", ".venv"]
+
+[tool.ruff.lint]
+# The engine is deliberately dense (one-line vector methods, comprehensions in
+# hot loops), so the style rules that would fight that are off. Correctness
+# rules stay on.
+select = [
+  "E",     # pycodestyle errors
+  "F",     # pyflakes
+  "B",     # flake8-bugbear
+  "A",     # flake8-builtins
+  "C4",    # flake8-comprehensions
+  "PIE",   # flake8-pie
+  "RET",   # flake8-return
+  "SIM",   # flake8-simplify
+  "UP",    # pyupgrade
+  "RUF",   # ruff-specific
+  "PTH",   # flake8-use-pathlib
+  "RSE",   # flake8-raise
+]
+ignore = [
+  "E501",    # line length is handled by the formatter, not the linter
+  "E701",    # `def norm(self): return ...` one-liners are the house style for
+  "E702",    # the vector/geometry hot paths; splitting them hurts readability
+  "E731",    # assigning a lambda is fine for tiny dispatch tables
+  "E741",    # `l` for length reads better than `length` in hot loops
+  "B008",    # function call in argument default is used deliberately
+  "SIM108",  # ternaries are not always clearer than an if/else
+  "UP038",   # isinstance(x, (A, B)) is faster than the union form
+  "RUF012",  # ClassVar annotations are noise in this codebase
+  "RET504",  # a named result before return can be clearer
+  "RET505",  # ... and sometimes redundant after a guard
+  "SIM102",  # nested `if` guards are often clearer than one long condition,
+             # especially when the inner test needs its own comment
+  "SIM105",  # an explicit try/except/pass documents "this failure is not
+             # interesting here" better than contextlib.suppress does
+  "PTH",     # os.path.* is used throughout; migrating to pathlib is a
+             # separate mechanical change, not a lint fix
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ files exist to re-export the public API, so an import that
+# is not used *inside* the file is the whole point. test_api.py keeps these
+# honest by asserting every name in __all__ actually resolves.
+"spore_engine/__init__.py" = ["F401", "E402", "F811"]
+"spore_engine/*/__init__.py" = ["F401", "E402", "F811"]
+"spore_engine/*/*/__init__.py" = ["F401", "E402", "F811"]
+# Re-export modules (glyphs, util, colour constants) legitimately import a
+# symbol to publish it under a different name.
+"spore_engine/core/glyphs.py" = ["F401"]
+"spore_engine/fx/screenfx.py" = ["E402", "F401"]
+# Demos and the sandbox scripts are intentionally imperative and messy.
+"demos/*" = ["E", "F", "B", "SIM", "RET", "C4"]
+# scene_underwater.py draws rising bubbles with the ideographic zero, which
+# is the point; it is not a latin O that someone mistyped.
+"demos/scene_underwater.py" = ["RUF001"]
+"demo.py" = ["E", "F", "B", "SIM", "RET"]
+"easy_demo.py" = ["E", "F", "B", "SIM", "RET"]
+"shader_sandbox.py" = ["E", "F", "B", "SIM", "RET"]
+# Tests deliberately use asserts on internals and shadow module names.
+"tests/*" = ["B011", "SIM117", "RET504", "PTH"]
+"examples/*" = ["E", "F", "B", "SIM", "RET"]
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 is allowed globally; these are the ones that catch real bugs.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+# Not yet typed end to end. The engine is progressively annotated, so this
+# checks the annotated surface for real errors without demanding annotations
+# everywhere. Tighten `disallow_untyped_defs` as modules get typed.
+disallow_untyped_defs = false
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unused_configs = true
+no_implicit_optional = true
+strict_equality = true
+ignore_missing_imports = true
+exclude = ["^(demos|tests)/"]
+
+[[tool.mypy.overrides]]
+# These genuinely need untyped escapes (they wrap optional third-party calls).
+module = ["PIL.*", "numpy.*"]
+ignore_missing_imports = true

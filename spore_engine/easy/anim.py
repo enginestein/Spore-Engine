@@ -102,14 +102,17 @@ class Anim:
         if self._started:
             return
         self._started = True
-        if self._type == 'wait':
-            self._accum = 0.0
-        elif self._type in ('spin', 'pulse', 'wobble'):
+        if self._type == 'wait' or self._type in ('spin', 'pulse', 'wobble'):
             self._accum = 0.0
         elif self._type == 'tween' and self._props:
             for name in self._props:
-                start, end = self._props[name]
-                self._props[name] = (start, end)
+                # Re-read the start value from the sprite now. to()/fade()/
+                # scale() capture it when they are called, and this loop used to
+                # write the same pair straight back, so a sprite that moved
+                # between building the animation and running it snapped back to
+                # wherever it was when to() was called.
+                _captured, end = self._props[name]
+                self._props[name] = (float(getattr(self.sprite, name)), end)
             self._tween = Tween(self._duration, self._easing, self._loop, self._yoyo)
             if self._delay > 0:
                 self._tween.elapsed = -self._delay
@@ -132,7 +135,8 @@ class Anim:
             return
         if self._type == 'pulse':
             self._accum += dt
-            t = (self._accum % self._pulse_period) / self._pulse_period
+            period = self._pulse_period or 1.0
+            t = (self._accum % period) / period
             mid = (self._pulse_min + self._pulse_max) / 2
             amp = (self._pulse_max - self._pulse_min) / 2
             s = mid + amp * math.sin(t * math.pi * 2)
@@ -141,7 +145,8 @@ class Anim:
             return
         if self._type == 'wobble':
             self._accum += dt
-            t = (self._accum % self._wobble_period) / self._wobble_period
+            period = self._wobble_period or 1.0
+            t = (self._accum % period) / period
             self.sprite.x += math.sin(t * math.pi * 2) * self._wobble_amount * dt
             return
         if self._tween is None:
@@ -152,7 +157,7 @@ class Anim:
         for name, (start, end) in self._props.items():
             setattr(self.sprite, name, start + (end - start) * v)
         if self._tween.done:
-            for name, (start, end) in self._props.items():
+            for name, (_start, end) in self._props.items():
                 setattr(self.sprite, name, end)
             self._done = True
             if self._callback:

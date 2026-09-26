@@ -1,6 +1,6 @@
 from __future__ import annotations
-import math, random
-from typing import Optional
+import math
+import random
 from ..core.canvas import Canvas
 from ..core.color import Color
 
@@ -20,7 +20,7 @@ class Point:
 
 
 class Triangle:
-    __slots__ = ('a', 'b', 'c', 'circum_x', 'circum_y', 'circum_r2')
+    __slots__ = ('a', 'b', 'c', 'circum_r2', 'circum_x', 'circum_y')
     def __init__(self, a: Point, b: Point, c: Point):
         self.a = a
         self.b = b
@@ -71,7 +71,7 @@ class Delaunay:
         self.points.append(p)
         return p
 
-    def triangulate(self, points: Optional[list[Point]] = None) -> list[Triangle]:
+    def triangulate(self, points: list[Point] | None = None) -> list[Triangle]:
         if points is not None:
             self.points = points
         pts = self.points
@@ -138,7 +138,7 @@ class Delaunay:
 
     def render(self, canvas: Canvas, ox: int = 0, oy: int = 0,
                show_vertices: bool = True, show_edges: bool = True,
-               color: Optional[Color] = None):
+               color: Color | None = None):
         col = color or Color(100, 200, 255)
         if show_edges:
             for t in self.triangles:
@@ -153,7 +153,7 @@ class Delaunay:
                 canvas.set_pixel(int(p.x) + ox, int(p.y) + oy, '●', Color(255, 200, 100), z=2)
 
     def render_voronoi(self, canvas: Canvas, ox: int = 0, oy: int = 0,
-                       color: Optional[Color] = None):
+                       color: Color | None = None):
         col = color or Color(100, 255, 150)
         cells = self.voronoi()
         for _, verts in cells:

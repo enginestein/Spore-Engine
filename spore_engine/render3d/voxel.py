@@ -1,15 +1,14 @@
 from __future__ import annotations
 import math
-from typing import Optional, List
 from ..core.canvas import Canvas, HiResCanvas
-from ..core.color import Color, Gradient, WHITE, BLACK
+from ..core.color import Color
 
 class VoxelScene:
     """
     Renders a heightmap as a 3D voxel landscape with dynamic shading.
     """
-    def __init__(self, width: int, depth: int, heightmap: List[List[float]],
-                 colors: Optional[List[Color]] = None):
+    def __init__(self, width: int, depth: int, heightmap: list[list[float]],
+                 colors: list[Color] | None = None):
         self.w = width
         self.d = depth
         self.heightmap = heightmap
@@ -40,8 +39,8 @@ class VoxelScene:
         cw, ch = canvas.width, canvas.height
         
         # Camera rotation
-        cos_a = math.cos(angle)
-        sin_a = math.sin(angle)
+        math.cos(angle)
+        math.sin(angle)
         
         # Light direction vector (simplified)
         lx = math.cos(light_angle)

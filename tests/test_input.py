@@ -91,7 +91,7 @@ def test_printable_and_ctrl():
 
 def test_multibyte_utf8():
     inp, feed = _make_input()
-    feed('▓'.encode('utf-8'))
+    feed('▓'.encode())
     assert inp.poll() == '▓'
 
 

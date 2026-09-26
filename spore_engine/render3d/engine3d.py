@@ -1,9 +1,7 @@
 from __future__ import annotations
 import math
-import random
-from typing import Optional
 from ..core.geom import Vec3, Mat4
-from ..core.color import Color, Gradient
+from ..core.color import Color
 from ..core.canvas import Canvas, HiResCanvas, SHADE_CHARS
 
 
@@ -51,13 +49,20 @@ class Mesh3D:
         s = size / 2
         m.verts = [Vec3(x, y, z) for x in (-s, s) for y in (-s, s) for z in (-s, s)]
         idx = lambda x, y, z: x * 4 + y * 2 + z
+        # Each face holds four vertices of one plane, wound so that
+        # ``(v1-v0) x (v2-v0)`` points *outward*: render_mesh_solid culls on
+        # ``normal . view_dir >= 0`` and lights on ``normal . light_dir``, so
+        # an inside-out face is both culled when it should be drawn and lit from
+        # the wrong side. The two z faces below used to list vertices from both
+        # z planes, which made them duplicates of the y faces - a cube then had
+        # no +-z normal at all and rendered as nothing when viewed down an axis.
         m.faces = [
-            [idx(0,0,0),idx(0,1,0),idx(0,1,1),idx(0,0,1)],
-            [idx(1,0,0),idx(1,0,1),idx(1,1,1),idx(1,1,0)],
+            [idx(0,0,0),idx(0,0,1),idx(0,1,1),idx(0,1,0)],
+            [idx(1,0,0),idx(1,1,0),idx(1,1,1),idx(1,0,1)],
             [idx(0,0,0),idx(1,0,0),idx(1,0,1),idx(0,0,1)],
             [idx(0,1,0),idx(0,1,1),idx(1,1,1),idx(1,1,0)],
-            [idx(0,0,0),idx(0,0,1),idx(1,0,1),idx(1,0,0)],
-            [idx(0,1,0),idx(1,1,0),idx(1,1,1),idx(0,1,1)],
+            [idx(0,0,0),idx(0,1,0),idx(1,1,0),idx(1,0,0)],
+            [idx(0,0,1),idx(1,0,1),idx(1,1,1),idx(0,1,1)],
         ]
         m.edges = [(0,1),(1,3),(3,2),(2,0),(4,5),(5,7),(7,6),(6,4),(0,4),(1,5),(2,6),(3,7)]
         m.face_colors = [Color(200,50,50),Color(50,200,50),Color(50,50,200),
@@ -127,7 +132,6 @@ class Mesh3D:
         def subdivide(faces, level):
             if level == 0: return faces
             new_faces = []
-            mid_cache = {}
             for tri in faces:
                 a, b, c = tri
                 ab = midpoint(m.verts[a], m.verts[b])
@@ -163,7 +167,7 @@ class Mesh3D:
 
 def render_mesh_wireframe(canvas: Canvas, mesh: Mesh3D, 
                           view_mat: Mat4, proj_mat: Mat4,
-                          char: str = '#', fg: Optional[Color] = None,
+                          char: str = '#', fg: Color | None = None,
                           z: float = 0):
     mat = proj_mat * view_mat
     projected = []
@@ -186,12 +190,20 @@ def render_mesh_wireframe(canvas: Canvas, mesh: Mesh3D,
 def render_mesh_solid(hires: HiResCanvas, mesh: Mesh3D,
                       view_mat: Mat4, proj_mat: Mat4,
                       light_dir: Vec3 = LIGHT_DEFAULT,
-                      color_override: Optional[list[Color]] = None,
-                      z_offset: float = 0):
+                      color_override: list[Color] | None = None,
+                      z_offset: float = 0,
+                      shade=None, lights=None):
     """Rasterize a mesh with a per-pixel z-buffer.
 
     Depth is interpolated across each polygon and depth-tested per pixel,
     so intersecting meshes resolve correctly (painter's algorithm does not).
+
+    ``shade`` replaces the built-in shading. It is called as
+    ``shade(face_index, normal, view_dir, lights)`` and must return a
+    :class:`Color`; ``lights`` is passed straight through, so a caller with a
+    light list does not have to flatten it into a single ``light_dir`` first.
+    The default is a Lambert term with a 0.2 ambient floor and the face's own
+    colour, which is what this has always done.
     """
     mat = proj_mat * view_mat
     proj_verts = []
@@ -206,9 +218,12 @@ def render_mesh_solid(hires: HiResCanvas, mesh: Mesh3D,
         normal = mesh.face_normal(fi)
         view_dir = Vec3(-view_mat[2,0], -view_mat[2,1], -view_mat[2,2]).norm()
         if normal.dot(view_dir) >= 0: continue
-        lighting = max(0.2, normal.dot(light_dir))
-        fc = color_override[fi] if color_override and fi < len(color_override) else Color(200, 200, 200)
-        shaded = fc.mul(lighting)
+        if shade is not None:
+            shaded = shade(fi, normal, view_dir, lights)
+        else:
+            lighting = max(0.2, normal.dot(light_dir))
+            fc = color_override[fi] if color_override and fi < len(color_override) else Color(200, 200, 200)
+            shaded = fc.mul(lighting)
         _rasterize_polygon(hires, [proj_verts[v] for v in face], shaded, z_offset)
 
 

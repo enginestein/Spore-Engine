@@ -1,6 +1,6 @@
 from __future__ import annotations
-import math
-from typing import Optional, Callable, Any
+from typing import Any
+from collections.abc import Callable
 from ..core.color import Color
 from .anim import EASING, lerp, lerp_color, lerp_tuple
 
@@ -90,7 +90,7 @@ class Timeline:
             self.tracks[name] = Track(name, default)
         return self.tracks[name]
 
-    def get_track(self, name: str) -> Optional[Track]:
+    def get_track(self, name: str) -> Track | None:
         return self.tracks.get(name)
 
     def add_keyframe(self, track_name: str, time: float,

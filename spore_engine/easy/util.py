@@ -1,6 +1,6 @@
 from ..core.color import Color
-from ..core.util import clamp, smoothstep, lerp_color
 
+from ..core.util import clamp, smoothstep, lerp_color  # noqa: F401  (re-exported for the subpackage API)
 def map_range(value, in_min, in_max, out_min, out_max):
     if in_min == in_max:
         return out_min

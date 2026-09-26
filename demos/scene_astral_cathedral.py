@@ -95,7 +95,7 @@ def scene_astral_cathedral(c, hr, t, pt, dt):
             c.set_pixel(x, floor_y, '═', Color(15, 12, 20), z=8)
 
     cloud_cols = [(60, 40, 80), (80, 50, 100), (100, 60, 120)]
-    for y in range(0, int(h*0.12)):
+    for y in range(int(h*0.12)):
         for x in range(w):
             n = math.sin(x*0.02+t*0.3+y*0.1)*0.5+0.5
             if n > 0.65:

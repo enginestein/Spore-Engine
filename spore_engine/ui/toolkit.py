@@ -1,48 +1,24 @@
 from __future__ import annotations
-import sys, tty, termios, select, os, signal, time, math
-from typing import Optional, Callable
-from ..core.color import Color, WHITE, DIM, BLACK
+import sys
+import select
+import os
+from collections.abc import Callable
+from ..core.color import Color, WHITE, DIM
 from ..core.canvas import Canvas
-from .widgets import Widget, WidgetManager, Frame, Label, Button, TextField, Checkbox
+from ..core.term import (DEFAULT_TERM_SIZE, TerminalSession, monotonic,
+                         posix_terminal_available, terminal_size, write_stdout)
+from .widgets import Widget, WidgetManager, Button, TextField, Checkbox
 
 
 # -------------------------------------------------------------------
 # TERMINAL EVENT LOOP
 # -------------------------------------------------------------------
-
-_defs = None
-
-
-def _save_term():
-    global _defs
-    _defs = termios.tcgetattr(sys.stdin.fileno())
-
-
-def _restore_term():
-    global _defs
-    if _defs:
-        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, _defs)
-
-
-def _set_raw():
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    new = termios.tcgetattr(fd)
-    new[tty.LFLAG] &= ~(termios.ECHO | termios.ICANON | termios.ISIG)
-    new[tty.CC][termios.VMIN] = 0
-    new[tty.CC][termios.VTIME] = 1
-    termios.tcsetattr(fd, termios.TCSADRAIN, new)
-    return old
-
-
-def _enable_mouse():
-    sys.stdout.write('\033[?1000h\033[?1002h\033[?1006h')
-    sys.stdout.flush()
-
-
-def _disable_mouse():
-    sys.stdout.write('\033[?1000l\033[?1002l\033[?1006l')
-    sys.stdout.flush()
+#
+# Raw mode, the alternate screen, cursor visibility and mouse reporting are all
+# owned by core.term now. This module used to import termios/tty at module scope
+# (breaking the whole package on Windows) and kept its own `_defs` global
+# alongside an `self._old_term` attribute, so it saved and restored terminal
+# state twice and could restore the wrong one.
 
 
 _KEYS = {
@@ -56,39 +32,19 @@ _KEYS = {
 }
 
 
-def _parse_mouse(buf: str) -> Optional[tuple[str, int, int]]:
-    try:
-        if '\x1b[' not in buf:
-            return None
-        idx = buf.index('\x1b[')
-        rest = buf[idx + 2:]
-        if not rest:
-            return None
-        if rest[-1] not in ('M', 'm'):
-            return None
-        data = rest[:-1]
-        if data.startswith('<'):
-            data = data[1:]
-        parts = data.split(';')
-        if len(parts) == 3:
-            cb = int(parts[0])
-            mx = int(parts[1]) - 1
-            my = int(parts[2]) - 1
-            if cb & 64:
-                return ('mouse_up', mx, my)
-            elif cb & 32:
-                return ('mouse_move', mx, my)
-            else:
-                return ('mouse_down', mx, my)
-    except (ValueError, IndexError):
-        pass
-    return None
+def _is_sgr_mouse(seq: str) -> bool:
+    """True for an SGR mouse report such as ``\\x1b[<0;10;5M``."""
+    return len(seq) > 3 and seq.startswith('\x1b[<') and seq[-1] in ('M', 'm')
 
 
-def _read_key(timeout: float = 0.01) -> Optional[str]:
+def _read_key(timeout: float = 0.01) -> str | None:
     if not select.select([sys.stdin], [], [], timeout)[0]:
         return None
     ch = os.read(sys.stdin.fileno(), 1).decode('utf-8', errors='replace')
+    if not ch:
+        # EOF: select() keeps reporting the descriptor as ready, so this must
+        # read as "no key" rather than as a character.
+        return None
     if ch != '\x1b':
         if ch == '\x7f':
             return 'backspace'
@@ -107,6 +63,11 @@ def _read_key(timeout: float = 0.01) -> Optional[str]:
             break
         if b == 'M' or b == 'm':
             break
+    # A click is an escape-prefixed sequence too. Reporting it as 'escape' made
+    # every mouse click quit the app or close the top dialog, so hand it to
+    # _read_mouse_events() via the 'mouse' sentinel instead.
+    if _is_sgr_mouse(seq):
+        return 'mouse'
     if seq in _KEYS:
         return _KEYS[seq]
     return 'escape'
@@ -131,7 +92,12 @@ def _read_mouse_events(timeout: float = 0.001) -> list[tuple[str, int, int]]:
                     try:
                         parts = part.split(';')
                         cb, mx, my = int(parts[0]), int(parts[1]) - 1, int(parts[2]) - 1
-                        if cb & 64:
+                        # A release is reported with a lowercase 'm'
+                        # terminator, so the button code has to be consulted
+                        # before the callback bits. Without this, mouse_up was
+                        # never delivered and clicks on a button never fired:
+                        # Button only triggers on mouse_up.
+                        if ch == 'm' or cb & 64:
                             events.append(('mouse_up', mx, my))
                         elif cb & 32:
                             events.append(('mouse_move', mx, my))
@@ -149,11 +115,12 @@ class TerminalApp:
         self.canvas = Canvas(canvas_w, canvas_h)
         self.manager = WidgetManager()
         self.running = False
-        self._on_tick: Optional[Callable] = None
-        self._draw_callback: Optional[Callable] = None
+        self._on_tick: Callable | None = None
+        self._draw_callback: Callable | None = None
         self._tick_rate = 0.033
         self._raw_mode = False
-        self._old_term = None
+        self._session: TerminalSession | None = None
+        self._max_ticks: int | None = None
         self._prev_buffer = None
         self._dialog_stack: list[Dialog] = []
         self._theme = {
@@ -181,6 +148,7 @@ class TerminalApp:
     def push_dialog(self, dialog: Dialog):
         self._dialog_stack.append(dialog)
         dialog.visible = True
+        dialog.on_dismiss = self._on_dialog_dismissed
         self.manager.add(dialog)
         for btn in dialog._buttons:
             self.manager.add(btn, focusable=True)
@@ -188,43 +156,55 @@ class TerminalApp:
             self.manager.add(cw)
         self.manager.focus_first()
 
+    def _on_dialog_dismissed(self, dialog: Dialog):
+        # A dismissed dialog left itself on the stack, so it kept swallowing
+        # keys and its widgets leaked into the manager on every cycle.
+        if dialog in self._dialog_stack:
+            self._unregister_dialog(dialog)
+
     def pop_dialog(self):
-        if not self._dialog_stack:
-            return
-        dialog = self._dialog_stack.pop()
+        if self._dialog_stack:
+            self._unregister_dialog(self._dialog_stack[-1])
+
+    def _unregister_dialog(self, dialog: Dialog):
+        self._dialog_stack.remove(dialog)
         self.manager.remove(dialog)
         for btn in dialog._buttons:
             self.manager.remove(btn)
         for cw in dialog._content_widgets:
             self.manager.remove(cw)
 
-    def run(self):
-        self._old_term = _set_raw()
-        self._raw_mode = True
-        _enable_mouse()
+    def run(self, max_ticks: int | None = None):
+        """Run the event loop until :meth:`stop`.
+
+        Terminal setup and teardown are handled by a
+        :class:`~spore_engine.core.term.TerminalSession`, so raw mode, the
+        alternate screen, the cursor and mouse reporting are always restored
+        even if the loop raises.
+
+        With a non-terminal stdin this raises ``RuntimeError`` rather than
+        spinning with no way to read a key. ``max_ticks`` bounds the loop for
+        tests.
+        """
+        if not posix_terminal_available():
+            raise RuntimeError(
+                'TerminalApp.run() needs a real terminal on stdin; this '
+                'process has a pipe or a redirected stream.')
         self.running = True
-        _save_term()
-
-        sys.stdout.write('\033[?25l')
-        sys.stdout.flush()
-
+        self._max_ticks = max_ticks
+        self._session = TerminalSession(mouse=True, alt_screen=True, raw=True)
         try:
-            self._loop()
+            with self._session:
+                self._loop()
+        except KeyboardInterrupt:
+            pass
         finally:
-            _restore_term()
             self._cleanup()
 
     def _cleanup(self):
-        _disable_mouse()
-        if self._raw_mode and self._old_term:
-            try:
-                termios.tcsetattr(sys.stdin.fileno(),
-                                  termios.TCSADRAIN, self._old_term)
-            except Exception:
-                pass
+        # The session restores the terminal; this only clears our own flags.
         self._raw_mode = False
-        sys.stdout.write('\033[?25h\033[0m')
-        sys.stdout.flush()
+        write_stdout('\033[0m')
 
     def stop(self):
         self.running = False
@@ -269,20 +249,16 @@ class TerminalApp:
             if last_fg or last_bg:
                 line_parts.append('\033[0m')
             output.append(''.join(line_parts))
-        sys.stdout.write(''.join(output))
-        sys.stdout.flush()
+        write_stdout(''.join(output))
 
     def _get_term_size(self):
-        try:
-            import shutil
-            return shutil.get_terminal_size((80, 24))
-        except Exception:
-            return (80, 24)
+        return terminal_size(DEFAULT_TERM_SIZE)
 
     def _loop(self):
-        last_tick = time.time()
+        last_tick = monotonic()
+        ticks = 0
         while self.running:
-            now = time.time()
+            now = monotonic()
             dt = now - last_tick
             if dt >= self._tick_rate:
                 last_tick = now
@@ -305,12 +281,14 @@ class TerminalApp:
                 if self._on_tick:
                     self._on_tick(dt)
                 self.render()
+                ticks += 1
+                if self._max_ticks is not None and ticks >= self._max_ticks:
+                    break
 
     def _handle_key(self, key: str):
         if self._dialog_stack:
             top = self._dialog_stack[-1]
             if key == 'escape':
-                self.pop_dialog()
                 top.dismiss(None)
                 return
             elif key == 'enter' or key == '\r':
@@ -346,8 +324,8 @@ class Form(Widget):
     def __init__(self, x: int, y: int, width: int = 40,
                  title: str = 'Form',
                  fg: Color = WHITE, accent: Color = Color(100, 200, 255),
-                 submit_callback: Optional[Callable[[dict], None]] = None,
-                 cancel_callback: Optional[Callable[[], None]] = None):
+                 submit_callback: Callable[[dict], None] | None = None,
+                 cancel_callback: Callable[[], None] | None = None):
         self.fields: list[tuple[str, Widget]] = []
         self.values: dict[str, any] = {}
         self.title = title
@@ -372,6 +350,9 @@ class Form(Widget):
         self._field_y += 2
         self.height = self._field_y - self.y + 2
         self._focusables.append(widget)
+        # Returned for parity with Dialog.add_button and TerminalApp.add, so a
+        # caller can keep a reference without indexing self.fields.
+        return widget
 
     def _set_value(self, label: str, value: any):
         self.values[label] = value
@@ -428,14 +409,17 @@ class Dialog(Widget):
                  title: str = 'Dialog',
                  fg: Color = WHITE, bg: Color = Color(20, 20, 35),
                  border_fg: Color = Color(100, 150, 255),
-                 callback: Optional[Callable[[Optional[str]], None]] = None):
+                 callback: Callable[[str | None], None] | None = None):
         super().__init__(x, y, width, height)
         self.title = title
         self.fg = fg
         self.bg = bg
         self.border_fg = border_fg
         self.callback = callback
-        self.result: Optional[str] = None
+        self.result: str | None = None
+        # Set by TerminalApp.push_dialog so dismissing a dialog also takes it
+        # off the stack and unregisters its widgets.
+        self.on_dismiss: Callable[[Dialog], None] | None = None
         self._buttons: list[Button] = []
         self._button_idx = 0
         self._content_widgets: list[Widget] = []
@@ -451,11 +435,13 @@ class Dialog(Widget):
     def add_content(self, widget: Widget):
         self._content_widgets.append(widget)
 
-    def dismiss(self, result: Optional[str]):
+    def dismiss(self, result: str | None):
         self.result = result
         self.visible = False
         if self.callback:
             self.callback(result)
+        if self.on_dismiss:
+            self.on_dismiss(self)
 
     def render(self, canvas: Canvas, z: float = 0):
         if not self.visible:

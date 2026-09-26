@@ -1,15 +1,17 @@
 from __future__ import annotations
 import math
 import numpy as np
-from numba import njit
+from ..core._accel import njit
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color as Col
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
-@njit(cache=True)
+@njit
 def _set_bounds(b: int, x: np.ndarray, w: int, h: int):
     for i in range(1, h - 1):
         x[i * w] = -x[i * w + 1] if b == 1 else x[i * w + 1]
@@ -23,13 +25,13 @@ def _set_bounds(b: int, x: np.ndarray, w: int, h: int):
     x[h * w - 1] = 0.5 * (x[h * w - 2] + x[(h - 2) * w + w - 1])
 
 
-@njit(cache=True)
+@njit
 def _lin_solve(b: int, x: np.ndarray, x0: np.ndarray, a: float, c: float,
                w: int, h: int, iterations: int):
     c_inv = 1.0 / c
     for _ in range(iterations):
         row = w
-        for j in range(1, h - 1):
+        for _j in range(1, h - 1):
             for i in range(1, w - 1):
                 idx = i + row
                 x[idx] = (x0[idx] + a * (x[idx - 1] + x[idx + 1] + x[idx - w] + x[idx + w])) * c_inv
@@ -37,7 +39,7 @@ def _lin_solve(b: int, x: np.ndarray, x0: np.ndarray, a: float, c: float,
         _set_bounds(b, x, w, h)
 
 
-@njit(cache=True)
+@njit
 def _advect(b: int, d: np.ndarray, d0: np.ndarray, u: np.ndarray, v: np.ndarray,
             dt: float, w: int, h: int):
     dtx = dt * (w - 2)
@@ -67,7 +69,7 @@ def _advect(b: int, d: np.ndarray, d0: np.ndarray, u: np.ndarray, v: np.ndarray,
     _set_bounds(b, d, w, h)
 
 
-@njit(cache=True)
+@njit
 def _project_divergence(u: np.ndarray, v: np.ndarray, p: np.ndarray, div: np.ndarray,
                         w: int, h: int):
     h_inv = 1.0 / max(w, h)
@@ -79,7 +81,7 @@ def _project_divergence(u: np.ndarray, v: np.ndarray, p: np.ndarray, div: np.nda
             p[idx] = 0
 
 
-@njit(cache=True)
+@njit
 def _project_gradient(u: np.ndarray, v: np.ndarray, p: np.ndarray, w: int, h: int):
     h_sc = max(w, h)
     for j in range(1, h - 1):
@@ -90,7 +92,7 @@ def _project_gradient(u: np.ndarray, v: np.ndarray, p: np.ndarray, w: int, h: in
             v[idx] -= 0.5 * h_sc * (p[idx + w] - p[idx - w])
 
 
-@njit(cache=True)
+@njit
 def _vorticity_step(u: np.ndarray, v: np.ndarray, dt: float, strength: float,
                     w: int, h: int):
     curl = np.zeros(w * h, dtype=np.float64)

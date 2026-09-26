@@ -8,6 +8,7 @@ flowchart TD
     E1(["easy_demo.py"]) -->|"uses"| EASY_APP
     E2(["demo.py"]) -->|"scene loop →"| E3["demos/scene_*.py"]
     E3 -->|"draws on"| CORE_CANVAS
+    E3 -->|"or builds an Image"| IO_IMAGE
     E3 -->|"uses"| FX_EFFECTS
     E3 -->|"uses"| R3D
     E3 -->|"uses"| SIM
@@ -32,7 +33,7 @@ flowchart TD
 
   %% ─── CORE ───────────────────────────────────────────────────────
   subgraph CORE["🧱 core/ — Rendering Foundation"]
-    CORE_CANVAS["Canvas"] -->|"composed of"| CORE_CELL["Cell{char,fg,bg,z}"]
+    CORE_CANVAS["Canvas"] -->|"composed of"| CORE_CELL["Cell{char,fg,bg,z,depth}"]
     CORE_CANVAS -->|"double-res"| CORE_HIRES["HiResCanvas"]
     CORE_HIRES -->|"to_canvas()"| CORE_CANVAS
     CORE_CANVAS -->|"render_to (diff vs previous frame)"| OUTPUT["ANSI Escape Codes → stdout"]
@@ -112,6 +113,14 @@ flowchart TD
     R3D_SDF["SDFScene{sd_sphere,sd_box,sd_torus,op_union,...}"] -->|"ray march →"| CORE_CANVAS
     R3D_VOXEL["VoxelScene"] -->|"heightmap → 3D"| CORE_CANVAS
     R3D_ISO["IsoMap + IsoTile + IsoCamera"] -->|"isometric →"| CORE_CANVAS
+
+    R3D_CAM["Camera3D (fov in DEGREES, aspect from the surface)"]
+    R3D_SCENE["Scene3D (retained)"] -->|"Entity3D + Light3D + Material"| R3D_ENT["DrawCall per visible entity"]
+    R3D_CAM -->|"view + projection, rebuilt per surface"| R3D_ENT
+    R3D_ENT -->|"Renderer.draw(call)"| R3D_MESHR["MeshRenderer"]
+    R3D_ENT -->|"Renderer.draw(call)"| R3D_FUNCR["FuncRenderer (callback)"]
+    R3D_MESHR -->|"world-transform, then render_mesh_solid(shade=…)"| R3D_MESH
+    R3D_SCENE -.->|"to_dict / save / load — JSON"| R3D_JSON[("scene.json")]
   end
 
   %% ─── PHYSICS 2D ────────────────────────────────────────────────
@@ -217,6 +226,19 @@ flowchart TD
     FX_LIGHT["LightManager{cast_ray,shadows}"] -->|"render"| CORE_CANVAS
     FX_FIELD["VectorField{FieldSource vortex/sink/swirl}"] -->|"advect particles"| FX_FPS["FieldParticle"]
     FX_FPS -->|"render"| CORE_CANVAS
+  end
+
+  %% ─── ARRAY IMAGING (whole-frame, pre-fold) ─────────────────────
+  subgraph IMGOPS["🖼️ fx/imgops.py — Array Imaging (grade before the fold)"]
+    IO_FIELD["Field (scalar per cell)"]
+    IO_IMAGE["Image (float RGB)"]
+    IO_FIELD -->|"luma / threshold / dilate / blurred"| IO_IMAGE
+    IO_IMAGE -->|"tonemapped, bloomed, vignetted, kuwahara, posterized"| IO_IMAGE
+    IO_IMAGE -->|"add, over, mix, absorb, scaled, stacked"| IO_IMAGE
+    IO_GEN["Field.fbm / fbm_line / plasma / radial / gauss / waves<br/>Image.gradient / zeros / full"] --> IO_FIELD
+    IO_STARS["StarField (retained, size-independent)"] -->|"draw / draw_cells"| IO_IMAGE
+    IO_IMAGE -->|"to_cells(cache=CellCache) — the ONLY quantisation"| CORE_CANVAS
+    IO_IMAGE -->|"to_cells"| CORE_HIRES
   end
 
   %% ─── POST-PROCESSING ────────────────────────────────────────────

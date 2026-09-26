@@ -17,8 +17,6 @@ def _init(w, h):
         'stars': [(rnd.uniform(0, w), rnd.uniform(0, horizon * 0.8),
                    rnd.uniform(0, 2 * math.pi), rnd.uniform(0.3, 1.0))
                   for _ in range(70)],
-        'ridge': [math.sin(i * 0.11) * 0.5 + math.sin(i * 0.043 + 2.0) * 0.3
-                  for i in range(w)],
     }
 
 
@@ -105,9 +103,8 @@ def _draw_ridge(c, w, horizon, t):
     base = Color(10, 2, 30)
     horizon_low = horizon // 2
     for x in range(w):
-        ridge = _SW['ridge']
-        i0 = int(x)
-        hgt = ridge[i0]
+        # Closed form, not a list sized to the first canvas width.
+        hgt = math.sin(x * 0.11) * 0.5 + math.sin(x * 0.043 + 2.0) * 0.3
         hgt += math.sin(t * 0.05 + x * 0.01) * 0.04
         top = horizon_low - int(hgt * horizon_low * 0.10)
         for y in range(top, horizon_low):

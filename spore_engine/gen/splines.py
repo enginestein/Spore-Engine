@@ -1,5 +1,4 @@
 from __future__ import annotations
-import math
 from ..core.canvas import Canvas
 from ..core.color import Color, WHITE, DIM, RED, GREEN, BLUE
 
@@ -61,8 +60,7 @@ def render_bezier(c: Canvas, pts: list[tuple[float, float]], steps: int = 30,
                 nxt.append(p)
             working = nxt
             level += 1
-    func = cubic_bezier if len(pts) == 4 else quadratic_bezier
-    prev = None
+    cubic_bezier if len(pts) == 4 else quadratic_bezier
     for i in range(steps + 1):
         t = i / steps
         if len(pts) == 4:
@@ -73,7 +71,6 @@ def render_bezier(c: Canvas, pts: list[tuple[float, float]], steps: int = 30,
         if 0 <= px < c.w and 0 <= py < c.h:
             if t_progress < 0 or t <= t_progress:
                 c.set_pixel(px, py, '▓', fg, z=z)
-        prev = (px, py)
 
 
 def render_catmull_rom(c: Canvas, pts: list[tuple[float, float]], steps: int = 30,
@@ -82,7 +79,7 @@ def render_catmull_rom(c: Canvas, pts: list[tuple[float, float]], steps: int = 3
     if len(pts) < 2:
         return
     if show_control:
-        for i, (px, py) in enumerate(pts):
+        for _i, (px, py) in enumerate(pts):
             c.set_pixel(int(px), int(py), '●', GREEN, z=z+1)
     n = len(pts)
     segments = list(range(n - 1))
@@ -92,8 +89,7 @@ def render_catmull_rom(c: Canvas, pts: list[tuple[float, float]], steps: int = 3
         p0 = pts[(i - 1) % n]
         p1 = pts[i]
         p2 = pts[(i + 1) % n]
-        p3 = pts[(i + 2) % n] if not closed or i < n - 1 else pts[(i + 2) % n]
-        prev = None
+        p3 = pts[(i + 2) % n]
         for j in range(steps + 1):
             t = j / steps
             p = catmull_rom(p0, p1, p2, p3, t)

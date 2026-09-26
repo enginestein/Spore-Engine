@@ -2,7 +2,7 @@ import math
 from spore_engine import *
 from spore_engine.core.color import *
 from spore_engine.ui.widgets import *
-from spore_engine.ui.toolkit import Form, Dialog, _set_raw, _read_key
+from spore_engine.ui.toolkit import Form, Dialog
 import demos as _d
 
 

@@ -97,7 +97,7 @@ def _nearest_part(bodies, px, py):
 
 def _draw_thick_limb(c, x1, y1, x2, y2, color, z=0):
     dx, dy = x2 - x1, y2 - y1
-    steps = int(round(max(abs(dx), abs(dy))))
+    steps = round(max(abs(dx), abs(dy)))
     if steps == 0:
         return
     adx, ady = abs(dx), abs(dy)
@@ -128,7 +128,7 @@ def _draw_thick_limb(c, x1, y1, x2, y2, color, z=0):
 
 def _draw_torso(c, bodies, z=0):
     ut, mt, pl = [bodies[i] for i in (UT, MT, PL)]
-    pts = [(int(round(b.pos.x)), int(round(b.pos.y))) for b in (ut, mt, pl)]
+    pts = [(round(b.pos.x), round(b.pos.y)) for b in (ut, mt, pl)]
     y1 = max(0, min(y for _, y in pts) - 2)
     y2 = min(c.h - 1, max(y for _, y in pts) + 2)
     xs_at_y = {}
@@ -137,10 +137,10 @@ def _draw_torso(c, bodies, z=0):
         for bx, by in pts:
             dy = y - by
             for b in (ut, mt, pl):
-                r = int(round(b.radius + 0.3))
+                r = round(b.radius + 0.3)
                 if abs(dy) <= r:
-                    hw = int(round(math.sqrt(max(0, r * r - dy * dy))))
-                    hits.extend([int(round(b.pos.x)) - hw, int(round(b.pos.x)) + hw])
+                    hw = round(math.sqrt(max(0, r * r - dy * dy)))
+                    hits.extend([round(b.pos.x) - hw, round(b.pos.x) + hw])
         if hits:
             xs_at_y[y] = (max(0, min(hits)), min(c.w - 1, max(hits)))
 
@@ -217,8 +217,8 @@ def scene_ragdoll(c, hr, t, pt, dt):
     _draw_torso(c, bodies, z=1)
 
     hb = bodies[H]
-    hx, hy = int(round(hb.pos.x)), int(round(hb.pos.y))
-    hr_int = max(1, int(round(hb.radius + 0.3)))
+    hx, hy = round(hb.pos.x), round(hb.pos.y)
+    hr_int = max(1, round(hb.radius + 0.3))
     if 0 < hx - hr_int and hx + hr_int < c.w and 0 < hy - hr_int and hy + hr_int < c.h:
         c.draw_circle(hx, hy, hr_int, fill=True, fg=SKIN, z=2)
         hair_col = HAIR
@@ -242,9 +242,9 @@ def scene_ragdoll(c, hr, t, pt, dt):
         if i == H or i in TORSOS:
             continue
         b = bodies[i]
-        x, y = int(round(b.pos.x)), int(round(b.pos.y))
+        x, y = round(b.pos.x), round(b.pos.y)
         if 0 <= x < c.w and 0 <= y < c.h:
-            rr = max(1, int(round(r + 0.3)))
+            rr = max(1, round(r + 0.3))
             if rr >= 2:
                 c.draw_circle(x, y, rr, fill=True, fg=col, z=3)
                 c.set_pixel(x, y, ch, Color(255, 255, 255).mul(0.5), z=4)
@@ -260,7 +260,7 @@ def scene_ragdoll(c, hr, t, pt, dt):
             pull = 80.0
             gb.apply_force(dx / dist * pull, dy / dist * pull)
 
-        gx, gy = int(round(gb.pos.x)), int(round(gb.pos.y))
+        gx, gy = round(gb.pos.x), round(gb.pos.y)
         if 0 <= gx < c.w and 0 <= gy < c.h:
             c.set_pixel(gx, gy, '@', Color(255, 255, 100), z=5)
 

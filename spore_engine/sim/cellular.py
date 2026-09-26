@@ -1,12 +1,12 @@
 from __future__ import annotations
-import math
 import random
-from typing import Optional
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 class GameOfLife:
@@ -48,7 +48,7 @@ class GameOfLife:
         self.grid, self.buffer = self.buffer, self.grid
 
     def render(self, canvas: Canvas, ox: int = 0, oy: int = 0,
-               fg_alive: Optional[Color] = None, fg_dead: Optional[Color] = None):
+               fg_alive: Color | None = None, fg_dead: Color | None = None):
         alive = fg_alive or Color(100, 255, 100)
         dead = fg_dead or Color(20, 40, 20)
         for y in range(min(self.h, canvas.height - oy)):
@@ -122,8 +122,8 @@ class Automata1D:
         return self.row
 
     def render(self, canvas: Canvas, ox: int = 0, oy: int = 0,
-               rows: int = 0, fg: Optional[Color] = None, t: float = 0):
-        c = fg or Color(100, 200, 255)
+               rows: int = 0, fg: Color | None = None, t: float = 0):
+        fg or Color(100, 200, 255)
         for r in range(rows):
             row_data = self.row if r == 0 else (self.step() if self.current_row > 0 else self.row)
             for x in range(min(self.w, canvas.width - ox)):

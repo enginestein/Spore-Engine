@@ -1,12 +1,14 @@
 from __future__ import annotations
-import math, random
-from typing import Optional
+import math
+import random
 from ..core.canvas import Canvas
-from ..core.color import Color, DIM
+from ..core.glyphs import SHADE_CHARS
+from ..core.color import Color
 from ..sim.noise import PerlinNoise
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 # -------------------------------------------------------------------
@@ -54,6 +56,7 @@ class Room:
 
 class DungeonGen:
     def __init__(self, width: int, height: int, seed: int = 42):
+        _check_size(width, height, 'DungeonGen')
         self.w = width
         self.h = height
         self.seed = seed
@@ -70,6 +73,10 @@ class DungeonGen:
 
         leaves = self._bsp(0, 0, self.w, self.h, bsp_depth)
         for leaf in leaves:
+            if len(self.rooms) >= max_rooms:
+                # max_rooms was only honoured by the fallback path below, so a
+                # request for 3 rooms on a large map produced a dozen.
+                break
             max_rw = min(max_room_size, leaf[2] - 2)
             max_rh = min(max_room_size, leaf[3] - 2)
             if max_rw < min_room_size or max_rh < min_room_size:
@@ -224,8 +231,23 @@ class DungeonGen:
 # RIVER GENERATION
 # -------------------------------------------------------------------
 
+def _check_size(w: int, h: int, who: str):
+    if w < 1 or h < 1:
+        raise ValueError(f'{who} size must be positive, got {w}x{h}')
+
+
+def _interior(rng: random.Random, w: int, h: int) -> tuple[int, int]:
+    """A random cell at least one in from the edge, clamped for tiny maps.
+
+    randint(1, w - 2) raises ValueError once w < 3, so a 1- or 2-cell map
+    crashed instead of producing a degenerate result.
+    """
+    return (rng.randint(0, max(0, w - 1)), rng.randint(0, max(0, h - 1)))
+
+
 class RiverGen:
     def __init__(self, width: int, height: int, seed: int = 42):
+        _check_size(width, height, 'RiverGen')
         self.w = width
         self.h = height
         self.seed = seed
@@ -240,8 +262,7 @@ class RiverGen:
         sources: list[tuple[int, int]] = []
 
         for _ in range(num_rivers * 2):
-            sx = self._rng.randint(1, self.w - 2)
-            sy = self._rng.randint(1, self.h - 2)
+            sx, sy = _interior(self._rng, self.w, self.h)
             if heightmap[sy][sx] > 0.6:
                 sources.append((sx, sy))
                 if len(sources) >= num_rivers:
@@ -249,8 +270,7 @@ class RiverGen:
 
         if not sources:
             for _ in range(num_rivers):
-                sources.append((self._rng.randint(1, self.w - 2),
-                                self._rng.randint(1, self.h - 2)))
+                sources.append(_interior(self._rng, self.w, self.h))
 
         for sx, sy in sources[:num_rivers]:
             path = self._trace_river(sx, sy, heightmap, meander, max_length)
@@ -282,7 +302,7 @@ class RiverGen:
             dy /= d_len
             x += dx
             y += dy
-            ix, iy = int(round(x)), int(round(y))
+            ix, iy = round(x), round(y)
             if ix < 0 or ix >= self.w or iy < 0 or iy >= self.h:
                 break
             if heightmap[iy][ix] < 0.05:
@@ -327,6 +347,7 @@ class RiverGen:
 
 class WorldGen:
     def __init__(self, width: int, height: int, seed: int = 42):
+        _check_size(width, height, 'WorldGen')
         self.w = width
         self.h = height
         self.seed = seed
@@ -361,8 +382,7 @@ class WorldGen:
 
         for _ in range(settlements):
             for _ in range(20):
-                sx = self._rng.randint(1, self.w - 2)
-                sy = self._rng.randint(1, self.h - 2)
+                sx, sy = _interior(self._rng, self.w, self.h)
                 e = self.heightmap[sy][sx]
                 b = self.biome_map[sy][sx]
                 if 0.15 < e < 0.7 and b not in ('ocean', 'beach', 'tundra', 'snow', 'mountain'):
@@ -377,8 +397,7 @@ class WorldGen:
 
         for _ in range(self._rng.randint(3, 8)):
             for _ in range(10):
-                fx = self._rng.randint(1, self.w - 2)
-                fy = self._rng.randint(1, self.h - 2)
+                fx, fy = _interior(self._rng, self.w, self.h)
                 e = self.heightmap[fy][fx]
                 b = self.biome_map[fy][fx]
                 if b not in ('ocean', 'snow', 'mountain'):
@@ -475,9 +494,7 @@ class WorldGen:
                     if b == 'mountain':
                         ci = int(e * (len(SHADE) - 1)) if e > 0.75 else 7
                         ch = SHADE[min(ci, len(SHADE) - 1)]
-                    elif b == 'ocean':
-                        ch = ' '
-                    elif b == 'snow':
+                    elif b == 'ocean' or b == 'snow':
                         ch = ' '
                     canvas.set_pixel(x, y, ch, col, z=z)
 

@@ -1,8 +1,5 @@
 from __future__ import annotations
-import math
-from typing import Optional
 import numpy as np
-from numba import njit
 from ..core.color import Color
 from ..core.canvas import Canvas
 
@@ -13,7 +10,13 @@ LIQUIDS = {WATER, OIL}
 GASES = {FIRE, SMOKE, STEAM}
 SOLIDS = {SAND, STONE, WOOD, LAVA, ACID, PLANT, SALT}
 FLAMMABLE = {WOOD, OIL, PLANT}
-MELTABLE = {SAND: LAVA, STONE: LAVA}
+#: What lava can melt. STONE is deliberately absent: it let lava convert a
+#: stone floor into more lava, which cooled back to stone and melted again, so
+#: a lava spill never settled and lava mass grew out of nothing.
+MELTABLE = {SAND: LAVA}
+
+#: Materials whose rules never change them, so they do not age.
+_INERT = {STONE, WOOD}
 
 MATERIAL_NAMES = {
     EMPTY: 'Empty', SAND: 'Sand', WATER: 'Water', STONE: 'Stone',
@@ -57,6 +60,11 @@ class PowderSim:
         self.current_material = SAND
         self.gravity = 1.0
         self._rng_state = np.random.RandomState(42)
+        # Rendering varies sand/water/fire tints for looks. That must not come
+        # out of the simulation's stream: sharing one RandomState made the
+        # trajectory depend on how many frames had been drawn, so the same
+        # inputs simulated differently depending on the render cadence.
+        self._rng_render = np.random.RandomState(1337)
 
     def _idx(self, x: int, y: int) -> int:
         return y * self.w + x
@@ -92,7 +100,7 @@ class PowderSim:
         elif type_ == SALT:
             self.life_arr[idx] = 1
 
-    def paint(self, x: int, y: int, type_: Optional[int] = None):
+    def paint(self, x: int, y: int, type_: int | None = None):
         mt = type_ if type_ is not None else self.current_material
         bs = self.brush_size
         for dy in range(-bs, bs + 1):
@@ -142,7 +150,12 @@ class PowderSim:
         rng = self._rng_state
         size = self.size
 
-        for y in range(h - 2, -1, -1):
+        # Every row is visited, including the last. Skipping the bottom row
+        # froze whatever settled there: acid, smoke and steam only clear
+        # themselves through their update rules, so they piled up on the floor
+        # forever. Scanning downwards means a grain that moves down lands in a
+        # row already visited this tick, so it is still processed only once.
+        for y in range(h - 1, -1, -1):
             row = y * w
             for x in range(w):
                 idx = row + x
@@ -152,7 +165,12 @@ class PowderSim:
                 if t == EMPTY:
                     continue
                 up[idx] = True
-                lf[idx] -= 1
+                # One tick of ageing for everything that ages. Doing it here
+                # rather than in each rule kept the rules from double-decrementing
+                # (lava and plant did, so they aged twice as fast), and skipping
+                # the inert solids stops their life counting down into negatives.
+                if t not in _INERT:
+                    lf[idx] -= 1
 
                 if t == SAND:
                     self._update_sand(x, y)
@@ -219,9 +237,16 @@ class PowderSim:
             self.life_arr[y * w + x] = self._rng_state.randint(20, 61)
 
     def _update_oil(self, x: int, y: int):
-        below = self._get_type(x, y + 1)
-        if below == WATER:
-            self._swap(x, y, x, y + 1)
+        above = self._get_type(x, y - 1)
+        if above == WATER:
+            # Rise through the water above, pushing it down.
+            self._swap(x, y, x, y - 1)
+            return
+        if self._get_type(x, y + 1) == WATER:
+            # Buoyant. Holding position lets _update_water sink past and leave
+            # the oil on top. Swapping downwards here instead contradicted that
+            # rule, and swapping upwards as well made the pair oscillate
+            # forever, since the two swaps undid each other every tick.
             return
         if self._try_move(x, y, 0, 1): return
         if self._try_move(x, y, -1, 0): return
@@ -277,12 +302,14 @@ class PowderSim:
             return
         if self._try_move(x, y, 0, 1):
             return
+        # Return on a successful diagonal move: falling through decremented
+        # life_arr at the cell the lava had just left.
         if rng.random_sample() < 0.5:
-            self._try_move(x, y, -1, 1)
-            self._try_move(x, y, 1, 1)
+            if self._try_move(x, y, -1, 1): return
+            if self._try_move(x, y, 1, 1): return
         else:
-            self._try_move(x, y, 1, 1)
-            self._try_move(x, y, -1, 1)
+            if self._try_move(x, y, 1, 1): return
+            if self._try_move(x, y, -1, 1): return
         for dy in (-1, 0, 1):
             for dx in (-1, 0, 1):
                 if dx == 0 and dy == 0: continue
@@ -292,9 +319,11 @@ class PowderSim:
                     if nt in FLAMMABLE and rng.random_sample() < 0.3:
                         self.set_cell(nx, ny, FIRE)
                     elif nt in MELTABLE and rng.random_sample() < 0.05:
-                        self.set_cell(nx, ny, LAVA)
+                        # Swap rather than set_cell: converting the neighbour
+                        # in place created lava out of nothing.
+                        self._swap(x, y, nx, ny)
+                        return
         idx = y * w + x
-        self.life_arr[idx] -= 1
         if self.life_arr[idx] <= 0:
             self.type_arr[idx] = STONE
 
@@ -321,14 +350,28 @@ class PowderSim:
         if rng.random_sample() < 0.01:
             self.type_arr[idx] = EMPTY
 
+    def _is_grounded(self, x: int, y: int) -> bool:
+        """True if the first solid cell under (x, y) is real ground.
+
+        Scanning past other plants lets a plant on the ground grow a column
+        upward, but without this a lone plant floating in mid-air treated its
+        own body as support and grew an uncontrolled stack in the air.
+        """
+        for yy in range(y + 1, self.h):
+            t = self._get_type(x, yy)
+            if t == EMPTY:
+                return False
+            if t != PLANT:
+                return True
+        return False
+
     def _update_plant(self, x: int, y: int, rng: np.random.RandomState):
         idx = y * self.w + x
-        self.life_arr[idx] -= 1
         if self.life_arr[idx] <= 0:
             if rng.random_sample() < 0.7:
                 self.type_arr[idx] = PLANT
                 self.life_arr[idx] = rng.randint(50, 201)
-        if rng.random_sample() < 0.05:
+        if rng.random_sample() < 0.05 and self._is_grounded(x, y):
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
                     if dx == 0 and dy == 0: continue
@@ -348,7 +391,6 @@ class PowderSim:
         if rng.random_sample() < 0.2:
             self._try_move(x, y, 1, 0)
         idx = y * self.w + x
-        self.life_arr[idx] -= 1
         if self.life_arr[idx] <= 0 or rng.random_sample() < 0.02:
             self.type_arr[idx] = EMPTY
 
@@ -369,11 +411,10 @@ class PowderSim:
     def render(self, canvas: Canvas, z: float = 5):
         w, h = self.w, self.h
         tp = self.type_arr
-        lf = self.life_arr
         clr = self.color_arr
         mc = MATERIAL_COLORS
         chs = RENDER_CHARS
-        rng = self._rng_state
+        rng = self._rng_render
 
         for y in range(h):
             row = y * w

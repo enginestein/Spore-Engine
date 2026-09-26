@@ -2,10 +2,9 @@
 
 import io
 
-from spore_engine import (World, System, Component, EcsEntity,
+from spore_engine import (World, System, EcsEntity,
                           Transform, SpriteComponent, SpriteRenderSystem)
-from spore_engine import Canvas, Scene, Color, Sprite, load_sprite
-import tempfile, os
+from spore_engine import Scene, Sprite, load_sprite
 
 
 def test_entity_create_and_query():

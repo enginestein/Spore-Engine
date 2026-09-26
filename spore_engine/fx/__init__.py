@@ -11,3 +11,4 @@ from .shaders import (Shader, ShaderPipeline,
     Posterize, Solarize, CelShade, HeatHaze, Emboss,
     PixelSort, Crystallize, ASCIIRemap, ChannelShift,
     Kaleidoscope, Warp, VHSGlitch, Ripple)
+from .imgops import Field, Image, StarField, CellCache, to_cells

@@ -1,6 +1,5 @@
 """Uniform asset pipeline: sprites, palettes, meshes and text from files."""
 
-import os
 
 import pytest
 
@@ -72,8 +71,19 @@ def test_load_model_obj(tmp_path):
 
 
 def test_load_model_missing_or_unknown(tmp_path):
-    assert load_model(str(tmp_path / 'missing.obj')) is None
-    assert load_model(str(tmp_path / 'nope.txt')) is None
+    """A bad path, a bad format and a corrupt file must not look alike."""
+    from spore_engine.core.assets import (AssetNotFoundError, AssetParseError,
+                                          UnsupportedAssetError)
+
+    with pytest.raises(AssetNotFoundError):
+        load_model(str(tmp_path / 'missing.obj'))
+    with pytest.raises(UnsupportedAssetError):
+        load_model(str(tmp_path / 'nope.txt'))
+
+    broken = tmp_path / 'broken.obj'
+    broken.write_text('v 0 0\n')
+    with pytest.raises(AssetParseError):
+        load_model(str(broken))
 
 
 def test_assets_store_memoizes(tmp_path):

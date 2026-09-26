@@ -1,12 +1,13 @@
 from __future__ import annotations
 import math
-from typing import Optional
-from ..core.color import Color, BLACK, WHITE
+from ..core.color import Color
 from ..core.canvas import HiResCanvas
+from ..core._optional import pillow
+from ..media._pillow_compat import flat_pixels
 
 
 class Ray:
-    __slots__ = ('origin', 'dir', 'depth')
+    __slots__ = ('depth', 'dir', 'origin')
     def __init__(self, ox: float, oy: float, oz: float,
                  dx: float, dy: float, dz: float, depth: int = 0):
         self.origin = (ox, oy, oz)
@@ -26,7 +27,7 @@ class Sphere:
         self.ior = ior
         self.emissive = emissive
 
-    def intersect(self, ray: Ray) -> Optional[float]:
+    def intersect(self, ray: Ray) -> float | None:
         ox, oy, oz = ray.origin
         dx, dy, dz = ray.dir
         ocx = ox - self.cx
@@ -64,7 +65,7 @@ class Plane:
         self.reflect = reflect
         self.emissive = emissive
 
-    def intersect(self, ray: Ray) -> Optional[float]:
+    def intersect(self, ray: Ray) -> float | None:
         denom = self.nx * ray.dir[0] + self.ny * ray.dir[1] + self.nz * ray.dir[2]
         if abs(denom) < 0.0001:
             return None
@@ -86,7 +87,7 @@ class Box:
         self.reflect = reflect
         self.emissive = emissive
 
-    def intersect(self, ray: Ray) -> Optional[float]:
+    def intersect(self, ray: Ray) -> float | None:
         ox, oy, oz = ray.origin
         dx, dy, dz = ray.dir
         xmin = self.cx - self.sx / 2
@@ -152,7 +153,7 @@ class Cylinder:
         self.reflect = reflect
         self.emissive = emissive
 
-    def intersect(self, ray: Ray) -> Optional[float]:
+    def intersect(self, ray: Ray) -> float | None:
         ox, oy, oz = ray.origin
         dx, dy, dz = ray.dir
         half_h = self.h / 2
@@ -179,7 +180,7 @@ class Cylinder:
 
     def _intersect_caps(self, ox, oy, oz, dx, dy, dz, half_h):
         best_t = None
-        for sign, cy_face in [(1, self.cy + half_h), (-1, self.cy - half_h)]:
+        for cy_face in (self.cy + half_h, self.cy - half_h):
             if abs(dy) < 0.0001: continue
             t = (cy_face - oy) / dy
             if t <= 0.001: continue
@@ -209,11 +210,15 @@ class TexturedQuad:
         self.emissive = emissive
         self.nx, self.ny, self.nz = 0, 0, 1
         self._build_basis()
-        from PIL import Image
-        img = Image.open(image_path).convert('RGBA')
+        Image = pillow('raytracer skybox loading')
+        # Decode inside a with-block and keep only the in-memory copy: the
+        # skybox is retained for the object's lifetime, so holding the open
+        # file handle would leak a descriptor per tracer.
+        with Image.open(image_path) as src:
+            img = src.convert('RGBA')
         self.img = img
         self.img_w, self.img_h = img.size
-        self.pixels = list(img.getdata())
+        self.pixels = flat_pixels(img)
 
     def _build_basis(self):
         nx, ny, nz = self.nx, self.ny, self.nz
@@ -299,7 +304,7 @@ class RayScene:
         nx, ny, nz = hit_obj.normal_at(px, py, pz)
         surface_color = hit_obj.color_at(px, py, pz) if hasattr(hit_obj, 'color_at') else hit_obj.color
         color = self.ambient.lerp(surface_color, 0.3)
-        for lx, ly, lz, lcol, lpower in self.lights:
+        for lx, ly, lz, _lcol, lpower in self.lights:
             ldx = lx - px
             ldy = ly - py
             ldz = lz - pz

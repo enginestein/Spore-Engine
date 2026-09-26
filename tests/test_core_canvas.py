@@ -4,7 +4,7 @@ import io
 
 import pytest
 
-from spore_engine import (Canvas, HiResCanvas, Color, Gradient, DIM)
+from spore_engine import (Canvas, HiResCanvas, Color, Gradient)
 
 
 PRIMITIVES = [

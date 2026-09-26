@@ -1,15 +1,23 @@
 from __future__ import annotations
 import math
-from typing import Optional
 from ..core.canvas import Canvas, SHADE_CHARS
-from ..core.color import Color, Gradient
+from ..core.color import Color
 from ..sim.physics import Vec2, _sanitize
 
 
 class SoftBody:
-    __slots__ = ('nodes', 'links', 'pressures', 'color', 'base_volume',
-                 'pressure_k', 'damping', 'gravity', '_vel')
-    def __init__(self, pos: Vec2 = Vec2(), color: Optional[Color] = None):
+    __slots__ = (
+        '_vel',
+        'base_volume',
+        'color',
+        'damping',
+        'gravity',
+        'links',
+        'nodes',
+        'pressure_k',
+        'pressures',
+    )
+    def __init__(self, pos: Vec2 = Vec2(), color: Color | None = None):
         self.nodes: list[Vec2] = []
         self.links: list[tuple[int, int, float, float]] = []  # (i, j, rest, stiffness)
         self.pressures: list[tuple[list[int], float]] = []
@@ -44,7 +52,7 @@ class SoftBody:
 
     @staticmethod
     def circle(cx: float, cy: float, radius: float, segments: int = 12,
-               color: Optional[Color] = None, stiffness: float = 200,
+               color: Color | None = None, stiffness: float = 200,
                pressure: float = 80) -> SoftBody:
         sb = SoftBody(Vec2(cx, cy), color)
         sb.pressure_k = pressure
@@ -62,7 +70,7 @@ class SoftBody:
 
     @staticmethod
     def blob(cx: float, cy: float, size: float = 3,
-             color: Optional[Color] = None) -> SoftBody:
+             color: Color | None = None) -> SoftBody:
         nodes = [
             (cx, cy - size), (cx + size * 0.7, cy - size * 0.5),
             (cx + size, cy), (cx + size * 0.7, cy + size * 0.5),
@@ -82,7 +90,7 @@ class SoftBody:
 
     @staticmethod
     def square(x: float, y: float, w: float, h: float,
-               color: Optional[Color] = None) -> SoftBody:
+               color: Color | None = None) -> SoftBody:
         sb = SoftBody(Vec2(x + w / 2, y + h / 2), color)
         sb.add_node(x, y)
         sb.add_node(x + w, y)

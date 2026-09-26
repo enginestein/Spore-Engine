@@ -1,8 +1,8 @@
 from __future__ import annotations
 import math
 import random
-from typing import Optional, Callable
-from ..core.color import Color, Gradient, PALETTES, BLACK, WHITE, DIM
+from collections.abc import Callable
+from ..core.color import Color
 from ..core.canvas import Canvas, SHADE_CHARS
 from ..sim.noise import PerlinNoise
 
@@ -14,7 +14,7 @@ class ParallaxLayer:
         self.height = height
         self.speed = speed
         self.z = z
-        self.fn: Optional[Callable] = None
+        self.fn: Callable | None = None
 
     def scroll(self, camera_x: float) -> float:
         return camera_x * self.speed
@@ -55,9 +55,9 @@ class Cloud:
 
     def _generate(self):
         rng = random.Random(abs(int(self.x * 100 + self.y)))
-        for iy in range(self.h):
+        for _iy in range(self.h):
             row = []
-            for ix in range(self.w):
+            for _ix in range(self.w):
                 v = 1 if rng.random() < 0.65 else 0
                 row.append(v)
             self.shape.append(row)
@@ -80,7 +80,7 @@ class CloudLayer:
     def __init__(self, count: int = 8, min_y: int = 1, max_y: int = 8,
                  min_w: int = 6, max_w: int = 20,
                  speed_range: tuple[float, float] = (0.2, 0.8),
-                 color: Optional[Color] = None):
+                 color: Color | None = None):
         self.clouds: list[Cloud] = []
         self.min_y = min_y
         self.max_y = max_y
@@ -113,7 +113,7 @@ class CloudLayer:
 class MountainProfile:
     def __init__(self, width: int, height: int, scale: float = 40,
                  octaves: int = 4, color: Color = Color(80, 70, 100),
-                 snow_color: Optional[Color] = None, z: float = 0):
+                 snow_color: Color | None = None, z: float = 0):
         self.width = width
         self.height = height
         self.scale = scale

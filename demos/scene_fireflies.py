@@ -21,8 +21,6 @@ def _init_state(w, h):
         'warm': rnd.random() < 0.25,
         'size': rnd.uniform(0.8, 1.4),
     } for _ in range(n)]
-    st.ground = [math.sin(i * 0.09) * 0.5 + math.sin(i * 0.031 + 1.7) * 0.4
-                 for i in range(w)]
     return st
 
 
@@ -51,12 +49,19 @@ def _draw_moon(c, w, h, t):
                 c.set_pixel(px, py, ' ', bg=Color(b, b + 10, 90), z=38)
 
 
+def _ground_at(x):
+    """Ground profile at column x.
+
+    Evaluated per column rather than cached in a list sized to the first
+    canvas we saw, so a later resize cannot index past the end of it.
+    """
+    return math.sin(x * 0.09) * 0.5 + math.sin(x * 0.031 + 1.7) * 0.4
+
+
 def _draw_ground(c, w, h, t):
     base = Color(10, 26, 20)
-    st = scene_state('fireflies')
-    g = st.ground
     for x in range(w):
-        top = h - 2 - int((0.5 + g[x]) * h * 0.07)
+        top = h - 2 - int((0.5 + _ground_at(x)) * h * 0.07)
         for y in range(top, h):
             c.set_pixel(x, y, ' ', bg=base, z=10)
         sparkle = wave(t, 1.2, x * 1.7)

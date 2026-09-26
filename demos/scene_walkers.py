@@ -265,8 +265,8 @@ class Walker:
     def draw(self, c):
         fi = int(self.anim_t) % self.nframes
         frame = self.frames[fi]
-        ox = int(round(self.x))
-        oy = int(round(self.y))
+        ox = round(self.x)
+        oy = round(self.y)
         for j in range(SPRITE_H):
             row = frame[j]
             for i in range(SPRITE_W):

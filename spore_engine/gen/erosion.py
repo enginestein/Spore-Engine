@@ -1,12 +1,14 @@
 from __future__ import annotations
-import math, random
-from typing import Optional
+import math
+import random
 from ..core.color import Color
+from ..core.glyphs import SHADE_CHARS
 from ..core.canvas import Canvas
 from ..sim.noise import PerlinNoise
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 class ErosionSim:
@@ -28,6 +30,33 @@ class ErosionSim:
                 v = v ** 1.5
                 self.heightmap[y][x] = v * amplitude
 
+    def resize(self, width: int, height: int):
+        """Reallocate the grids to a new size, resampling what fits.
+
+        Callers used to "resize" an ErosionSim by assigning ``sim.w`` and
+        ``sim.h`` directly, which left heightmap/water/sediment at their
+        original dimensions while every accessor believed the new ones. Any
+        terminal resize then raised IndexError partway through erosion.
+        Values inside the overlapping region are carried over, so a resize
+        does not wipe out terrain that is still on screen.
+        """
+        width, height = max(1, int(width)), max(1, int(height))
+        if (width, height) == (self.w, self.h):
+            return
+
+        def _resample(old):
+            if not old or not old[0]:
+                return [[0.0] * width for _ in range(height)]
+            oh, ow = len(old), len(old[0])
+            return [[old[min(oh - 1, y * oh // height)]
+                     [min(ow - 1, x * ow // width)] for x in range(width)]
+                    for y in range(height)]
+
+        self.heightmap = _resample(self.heightmap)
+        self.water = _resample(self.water)
+        self.sediment = _resample(self.sediment)
+        self.w, self.h = width, height
+
     def get_height(self, x: int, y: int) -> float:
         if 0 <= x < self.w and 0 <= y < self.h:
             return self.heightmap[y][x]
@@ -41,6 +70,8 @@ class ErosionSim:
         return (left - right, up - down)
 
     def _total_height(self, x: int, y: int) -> float:
+        if not (0 <= x < self.w and 0 <= y < self.h):
+            return 0.0
         return self.heightmap[y][x] + self.water[y][x]
 
     def erode(self, num_drops: int = 10000, rain_rate: float = 0.01,
@@ -48,14 +79,16 @@ class ErosionSim:
               deposit_rate: float = 0.3, erosion_rate: float = 0.05,
               gravity: float = 4.0, max_steps: int = 80):
         for _ in range(num_drops):
-            x = self._rng.randint(1, self.w - 2)
-            y = self._rng.randint(1, self.h - 2)
+            # randint(1, w-2) raises on grids narrower than 3, which is a
+            # legitimate size on a small terminal.
+            x = self._rng.randint(1, self.w - 2) if self.w > 2 else self._rng.randrange(self.w)
+            y = self._rng.randint(1, self.h - 2) if self.h > 2 else self._rng.randrange(self.h)
             water_vol = 1.0
             sediment = 0.0
             speed = 0.0
             px, py = x, y
 
-            for step in range(max_steps):
+            for _step in range(max_steps):
                 gx, gy = self._gradient(px, py)
                 gx /= max(1e-6, abs(gx) + abs(gy))
                 gy /= max(1e-6, abs(gx) + abs(gy))
@@ -66,7 +99,7 @@ class ErosionSim:
                 if nx < 1 or nx >= self.w - 1 or ny < 1 or ny >= self.h - 1:
                     break
 
-                nxi, nyi = int(round(nx)), int(round(ny))
+                nxi, nyi = round(nx), round(ny)
                 if nxi < 0 or nxi >= self.w or nyi < 0 or nyi >= self.h:
                     break
 

@@ -1,9 +1,9 @@
 from __future__ import annotations
 import math
 from ..core.color import Color
-from ..core.canvas import Canvas
 
 
+from ..core.canvas import Canvas  # noqa: F401  (re-exported for the subpackage API)
 class GameSprite:
     def __init__(self, art="", x=0, y=0, fg=None, bg=None, z=0, visible=True):
         self._x = float(x)
@@ -235,7 +235,6 @@ class GameSprite:
         return anim
 
     def then(self, callback):
-        from .anim import Anim
         self._anims[-1].then(callback)
         return self
 

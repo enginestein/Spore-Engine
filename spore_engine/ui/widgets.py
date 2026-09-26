@@ -1,9 +1,11 @@
 from __future__ import annotations
-import math, time
-from typing import Optional, Callable, List
-from ..core.color import Color, WHITE, BLACK, DIM
-from ..core.canvas import Canvas, SHADE_CHARS
+import time
+from collections.abc import Callable
+from ..core.color import Color, WHITE, DIM
+from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 
+#: Re-exported from core.glyphs so the ramp is defined once.
 SHADE = SHADE_CHARS
 
 
@@ -30,7 +32,7 @@ class Widget:
 
 class Label(Widget):
     def __init__(self, x: int, y: int, text: str = '',
-                 fg: Color = WHITE, bg: Optional[Color] = None):
+                 fg: Color = WHITE, bg: Color | None = None):
         super().__init__(x, y, max(1, len(text)), 1)
         self.text = text
         self.fg = fg
@@ -46,7 +48,7 @@ class Label(Widget):
 
 class TextBox(Widget):
     def __init__(self, x: int, y: int, width: int, height: int,
-                 fg: Color = WHITE, bg: Optional[Color] = None):
+                 fg: Color = WHITE, bg: Color | None = None):
         super().__init__(x, y, width, height)
         self.fg = fg
         self.bg = bg
@@ -114,8 +116,8 @@ class Button(Widget):
                  fg: Color = WHITE, bg: Color = Color(60, 60, 80),
                  hover_bg: Color = Color(80, 80, 120),
                  press_bg: Color = Color(120, 120, 180),
-                 callback: Optional[Callable] = None,
-                 key: Optional[str] = None):
+                 callback: Callable | None = None,
+                 key: str | None = None):
         super().__init__(x, y, width, 1)
         self.text = text
         self.fg = fg
@@ -136,7 +138,14 @@ class Button(Widget):
                 self.pressed = True
                 self.mouse_down_self = True
         elif event_type == 'mouse_up':
-            if self.pressed and self.mouse_down_self and self.hovered:
+            mx, my = data
+            # Accept the release position as well as a prior hover: terminals
+            # only report motion while the pointer moves, so a click with the
+            # pointer already resting on the button arrived with hovered still
+            # False and the click was silently dropped. The press/release pair
+            # on this same widget is what identifies the click.
+            if self.pressed and self.mouse_down_self and (
+                    self.hovered or self.contains(mx, my)):
                 if self.callback: self.callback()
             self.pressed = False
             self.mouse_down_self = False
@@ -163,10 +172,10 @@ class Button(Widget):
 
 
 class Menu(Widget):
-    def __init__(self, x: int, y: int, items: List[str] = None,
+    def __init__(self, x: int, y: int, items: list[str] | None = None,
                  fg: Color = WHITE, bg: Color = Color(40, 40, 60),
                  selected_bg: Color = Color(80, 80, 140),
-                 callback: Optional[Callable[[int, str], None]] = None):
+                 callback: Callable[[int, str], None] | None = None):
         h = len(items) if items else 0
         w = max([len(i) for i in items]) + 4 if items else 10
         super().__init__(x, y, w, h)
@@ -267,7 +276,7 @@ class Checkbox(Widget):
     def __init__(self, x: int, y: int, label: str = '', checked: bool = False,
                  fg: Color = WHITE, bg: Color = Color(30, 30, 40),
                  accent: Color = Color(100, 200, 255),
-                 callback: Optional[Callable[[bool], None]] = None):
+                 callback: Callable[[bool], None] | None = None):
         text_w = len(label) + 4
         super().__init__(x, y, text_w, 1)
         self.label = label
@@ -301,11 +310,11 @@ class Checkbox(Widget):
 
 
 class RadioGroup(Widget):
-    def __init__(self, x: int, y: int, options: List[str] = None,
+    def __init__(self, x: int, y: int, options: list[str] | None = None,
                  selected: int = 0,
                  fg: Color = WHITE, bg: Color = Color(30, 30, 40),
                  accent: Color = Color(255, 200, 80),
-                 callback: Optional[Callable[[int, str], None]] = None):
+                 callback: Callable[[int, str], None] | None = None):
         w = max(len(o) for o in (options or [''])) + 4
         h = len(options) if options else 0
         super().__init__(x, y, w, h)
@@ -345,10 +354,10 @@ class RadioGroup(Widget):
 
 
 class TabBar(Widget):
-    def __init__(self, x: int, y: int, tabs: List[str] = None,
+    def __init__(self, x: int, y: int, tabs: list[str] | None = None,
                  fg: Color = WHITE, bg: Color = Color(40, 40, 55),
                  active_bg: Color = Color(80, 80, 140),
-                 callback: Optional[Callable[[int, str], None]] = None):
+                 callback: Callable[[int, str], None] | None = None):
         w = sum(len(t) + 4 for t in (tabs or []))
         super().__init__(x, y, w, 1)
         self.tabs = tabs or []
@@ -375,7 +384,6 @@ class TabBar(Widget):
             bg = self.active_bg if is_sel else self.bg
             if self.focused and is_sel:
                 bg = Color(min(bg.r + 40, 255), min(bg.g + 40, 255), min(bg.b + 40, 255))
-            sep = '│'
             label = f' {tab} '
             for j, ch in enumerate(f' {label} '):
                 px = ox + j
@@ -393,7 +401,7 @@ class Slider(Widget):
                  label: str = '', value: float = 0.5,
                  fg: Color = Color(100, 200, 255),
                  bg: Color = Color(30, 30, 40),
-                 callback: Optional[Callable[[float], None]] = None):
+                 callback: Callable[[float], None] | None = None):
         super().__init__(x, y, width, 1)
         self.label = label
         self.value = value
@@ -450,12 +458,12 @@ class Slider(Widget):
 
 class Table(Widget):
     def __init__(self, x: int, y: int,
-                 headers: List[str] = None,
-                 col_widths: List[int] = None,
+                 headers: list[str] | None = None,
+                 col_widths: list[int] | None = None,
                  fg: Color = WHITE, bg: Color = Color(15, 15, 25),
                  header_bg: Color = Color(40, 40, 65),
                  select_bg: Color = Color(60, 60, 110),
-                 callback: Optional[Callable[[int, List[str]], None]] = None):
+                 callback: Callable[[int, list[str]], None] | None = None):
         cw = col_widths or [10] * len(headers or [])
         w = sum(cw) + len(cw) + 1
         h = (len(headers) + 2) if headers else 3
@@ -466,11 +474,11 @@ class Table(Widget):
         self.bg = bg
         self.header_bg = header_bg
         self.select_bg = select_bg
-        self.rows: List[List[str]] = []
+        self.rows: list[list[str]] = []
         self.selected = 0
         self.callback = callback
 
-    def set_rows(self, rows: List[List[str]]):
+    def set_rows(self, rows: list[list[str]]):
         self.rows = rows
         self.height = len(rows) + 2
         self.selected = 0
@@ -532,7 +540,7 @@ class TextField(Widget):
                  label: str = '', placeholder: str = '',
                  fg: Color = WHITE, bg: Color = Color(20, 20, 35),
                  accent: Color = Color(100, 200, 255),
-                 callback: Optional[Callable[[str], None]] = None):
+                 callback: Callable[[str], None] | None = None):
         super().__init__(x, y, width, 1)
         self.label = label
         self.placeholder = placeholder
@@ -609,7 +617,7 @@ class Toggle(Widget):
                  fg: Color = WHITE, bg: Color = Color(30, 30, 40),
                  on_fg: Color = Color(80, 200, 80),
                  off_fg: Color = Color(200, 80, 80),
-                 callback: Optional[Callable[[bool], None]] = None):
+                 callback: Callable[[bool], None] | None = None):
         text_w = len(label) + 8 if label else 6
         super().__init__(x, y, text_w, 1)
         self.label = label
@@ -622,10 +630,7 @@ class Toggle(Widget):
 
     def handle_event(self, event_type: str, data: any):
         if event_type == 'key_down' and self.focused:
-            if data in ('enter', '\r', ' '):
-                self.active = not self.active
-                if self.callback: self.callback(self.active)
-            elif data in ('left', 'right'):
+            if data in ('enter', '\r', ' ') or data in ('left', 'right'):
                 self.active = not self.active
                 if self.callback: self.callback(self.active)
 
@@ -719,11 +724,11 @@ class StatusBar(Widget):
 
 class WidgetManager:
     def __init__(self):
-        self.widgets: List[Widget] = []
-        self.focusable: List[Widget] = []
+        self.widgets: list[Widget] = []
+        self.focusable: list[Widget] = []
         self.focused_idx = 0
         self.mouse_pos = (0, 0)
-        self._mouse_down_widget: Optional[Widget] = None
+        self._mouse_down_widget: Widget | None = None
 
     def add(self, widget: Widget, focusable: bool = False):
         self.widgets.append(widget)
@@ -763,7 +768,7 @@ class WidgetManager:
         for i, w in enumerate(self.focusable):
             w.focused = (i == 0)
 
-    def get_focused(self) -> Optional[Widget]:
+    def get_focused(self) -> Widget | None:
         if self.focusable and self.focused_idx < len(self.focusable):
             return self.focusable[self.focused_idx]
         return None

@@ -1,7 +1,6 @@
 from __future__ import annotations
-import math, random
-from typing import Optional
-from ..core.color import Color, WHITE, BLACK
+import random
+from ..core.color import Color
 from ..core.canvas import Canvas
 
 
@@ -28,9 +27,10 @@ class TileMap:
     def is_solid(self, x: int, y: int) -> bool:
         if 0 <= x < self.width and 0 <= y < self.height:
             return self.collision[y][x]
-        if y >= self.height:
-            return False
-        return True
+        # Outside the grid counts as solid so movement is clamped at the
+        # borders, except below the bottom edge where there is nothing to
+        # collide with at all.
+        return y < self.height
 
     def render(self, canvas: Canvas, tileset: dict[int, tuple[str, Color]],
                camera_x: int = 0, camera_y: int = 0, z: float = 0):

@@ -13,7 +13,8 @@ def scene_golden_city(c, hr, t, pt, dt):
         bx = 0
         while bx < w:
             bw = random.randint(4, 12)
-            bh = random.randint(5, min(h-4, h//2 + random.randint(0, h//3)))
+            # randint(5, h-4) is an empty range on a short terminal.
+            bh = random.randint(1, max(1, min(h - 2, h // 2 + random.randint(0, h // 3))))
             buildings.append({'x': bx, 'w': bw, 'h': bh, 'windows': []})
             for wy in range(h-bh+2, h-2, random.randint(2, 4)):
                 for wx in range(bx+2, bx+bw-1, random.randint(2, 4)):

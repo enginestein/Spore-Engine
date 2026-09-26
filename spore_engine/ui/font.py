@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional, Dict
 from ..core.canvas import Canvas, HiResCanvas
 from ..core.color import Color, Gradient, WHITE
 
@@ -8,13 +7,13 @@ class Font:
     Bitmap font engine for rendering large text.
     Each character is represented by a bitmap of bits.
     """
-    def __init__(self, width: int, height: int, bitmap_data: Dict[str, list[int]]):
+    def __init__(self, width: int, height: int, bitmap_data: dict[str, list[int]]):
         self.width = width
         self.height = height
         self.data = bitmap_data
 
     def render_text(self, canvas: Canvas | HiResCanvas, text: str, x: int, y: int, 
-                    scale: int = 1, fg: Optional[Color] = None, bg: Optional[Color] = None):
+                    scale: int = 1, fg: Color | None = None, bg: Color | None = None):
         """
         Renders large bitmap text.
         """
@@ -36,7 +35,7 @@ class Font:
             cursor_x += (self.width + 1) * scale
 
     def render_text_gradient(self, canvas: Canvas | HiResCanvas, text: str, x: int, y: int,
-                             scale: int = 1, gradient: Optional[Gradient] = None, bg: Optional[Color] = None):
+                             scale: int = 1, gradient: Gradient | None = None, bg: Color | None = None):
         """
         Renders bitmap text filled with a gradient.
         """

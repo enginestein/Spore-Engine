@@ -197,7 +197,7 @@ def scene_ethereal_ruins(c: Canvas, hr: HiResCanvas, t: float, pt, dt: float):
             pattern = '▒' if (int(x / 2) + int(y)) % 3 == 0 else '░'
             c.set_pixel(x, y, pattern, fcolor, z=5)
 
-        for y in range(0, ds):
+        for y in range(ds):
             d_ = (c.h / 2 - y) / (c.h / 2)
             ct = min(1, d_ * 1.2)
             ccolor = _CEIL_GRAD.at(ct)

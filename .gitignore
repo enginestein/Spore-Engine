@@ -13,6 +13,7 @@ env/
 .pytype/
 .pytest_cache/
 .coverage
+coverage.json
 htmlcov/
 .tox/
 .mypy_cache/

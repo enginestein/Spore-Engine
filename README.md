@@ -1,6 +1,6 @@
 # Spore Engine
 
-A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3D rendering, physics, fluid simulation, procedural generation, cellular automata, ray tracing, and 125 demo scenes — all in pure Python with no external dependencies. Also includes image/video/GIF to ASCII conversion via ffmpeg or PIL, plus a **glyph art** module that converts media to copyable plain-text ASCII.
+A library-grade ASCII (text-mode) graphics engine with truecolor ANSI support, 3D rendering, physics, fluid simulation, procedural generation, cellular automata, ray tracing, and 135 demo scenes — in pure Python, with numpy as the only dependency. Also includes image/video/GIF to ASCII conversion via ffmpeg or PIL, plus a **glyph art** module that converts media to copyable plain-text ASCII.
 
 ## Demo
 
@@ -14,8 +14,10 @@ Terminal capture of the interactive scene demos, straight from `demo.py`.
 |---|---|
 | **Simple API** | `App`, `GameSprite`, `Anim` — sprites from ASCII art, tweened animations, keyboard/mouse input, fluent chaining |
 | **Assets & ECS** | Unified `load_sprite`/`load_palette`/`load_model`/`load_text` loaders behind a memoized `Assets` store; `World`/`System`/`Component`/`EcsEntity` game-logic ECS that draws through `SpriteRenderSystem` into Scene/Layer |
-| **Core Rendering** | `Canvas`, `HiResCanvas` (2x vertical via half-blocks), `Color` (HSV, hex, blending, gradients), `Sprite`, `Vec2`/`Vec3`/`Mat4`, incremental per-frame flush (only changed cells re-emitted) |
-| **3D Rendering** | `Mesh3D` with wireframe & solid shading, OBJ/PLY loader, backface culling, depth sort, light direction |
+| **Core Rendering** | `Canvas`, `HiResCanvas` (2x vertical via half-blocks), `Color` (HSV, hex, blending, gradients), `Sprite`, `Vec2`/`Vec3`/`Mat4`, per-cell `depth` distinct from painter's-order `z`, incremental per-frame flush (only changed cells re-emitted) |
+| **Array Imaging** | `Image`/`Field` float-RGB pipeline in `fx.imgops` — generate (`gradient`, `fbm`, `plasma`, `radial`, `waves`, `gauss`), composite (`add`, `over`, `mix`, `absorb`, `stacked`), grade (`tonemapped`, `bloomed`, `vignetted`, `blurred`, `kuwahara`, `posterized`, `scanlined`, `pixelated`, `chromatic`, `edged`), then `to_cells` once. Pre-fold, so a half-block surface is graded evenly |
+| **3D Rendering** | `Mesh3D` with wireframe & solid shading, OBJ/PLY loader, backface culling, depth sort, pluggable `shade` callback |
+| **Retained 3D Scene** | `Scene3D` of `Entity3D`/`Light3D` with `Material`s — one `Camera3D` convention for every backend, one `DrawCall` per visible entity, `Renderer` backends (`MeshRenderer`, `FuncRenderer`), JSON save/load |
 | **Isometric** | `IsoTile`, `IsoMap`, `IsoCamera` — tile grid with screen projection |
 | **Voxel** | `VoxelScene` — heightmap-based 3D landscape with directional shading & fog |
 | **Ray Tracing** | `RayScene`, `Sphere`, `Plane`, Phong shading, reflections, refraction, multiple light sources |
@@ -31,7 +33,7 @@ Terminal capture of the interactive scene demos, straight from `demo.py`.
 | **Visual Effects** | `plasma`, `fire`, `starfield`, `matrix_rain` |
 | **Text Effects** | 12 animations: `glitch_text`, `typewriter_text`, `sine_text`, `rainbow_text`, `gradient_text`, `scroll_text`, `star_wars_crawl`, `wave_text`, `fire_text`, `matrix_code_rain`, `bounce_text`, `zoom_text` |
 | **Screen Effects** | `shake`, `fade_overlay`, `flash`, `crossfade`, `color_overlay` |
-| **Post-Processing** | `box_blur`, `glow`, `edge_detect`, `dither`, `scanlines`, `vignette`, `chromatic_aberration`, `pixelate`, `palette_remap` |
+| **Post-Processing** | `box_blur`, `glow`, `edge_detect`, `dither`, `scanlines`, `vignette`, `chromatic_aberration`, `pixelate`, `palette_remap` on cells; the same effects as whole-image ops via `fx.imgops` (see **Array Imaging**) |
 | **Shader Pipeline** | `Shader`, `ShaderPipeline` — 16 modular shaders: `WaveDistort`, `SwirlDistort`, `KuwaharaFilter`, `Posterize`, `Solarize`, `CelShade`, `HeatHaze`, `Emboss`, `PixelSort`, `Crystallize`, `ASCIIRemap`, `ChannelShift`, `Kaleidoscope`, `Warp`, `VHSGlitch`, `Ripple` |
 | **Scene Transitions** | `Fade`, `Wipe` (4 dirs), `Slide`, `Checkerboard`, `PixelDissolve` |
 | **Volumetric FX** | `VolumetricFog`, `LightCone`, `SmokePlume`, `VolumetricRenderer` |
@@ -50,13 +52,13 @@ Terminal capture of the interactive scene demos, straight from `demo.py`.
 | **TileMap** | `TileMap`, `TileCamera`, auto-tiling, collision, `generate_platformer`, `generate_cave` |
 | **Bitmap Font** | `Font` — 5x7 character glyphs |
 | **Media I/O** | Image/video/GIF → ASCII (`ImageConverter`, `image_to_canvas`, `video_to_ascii`), `ScreenRecorder`, `glyphart` (copyable plain-text ASCII), ANSI file I/O (parse/export/save/load), `Video`/`FramePlayer`, canvas scaling & gradient |
-| **Demo Scenes** | 125 interactive demo scenes in `demo.py` / `demos/` |
+| **Demo Scenes** | 135 interactive demo scenes in `demo.py` / `demos/` |
 
 ## Quick Start
 
 ```bash
 python3 easy_demo.py             # Simple API demo (sprites, animation, input)
-python3 demo.py                  # Interactive demo (125 scenes)
+python3 demo.py                  # Interactive demo (135 scenes)
 ```
 
 ```python
@@ -98,6 +100,41 @@ app.add(Button(5, 5, 'Quit', on_click=lambda: app.stop()))
 app.run()
 ```
 
+```python
+# Retained 3D scene — data in, data out, saveable as JSON
+from spore_engine import Scene3D, Entity3D, Material, Light3D, Camera3D, HiResCanvas
+
+scene = Scene3D('room', background=Color(6, 8, 18))
+scene.camera = Camera3D.look_at((0, 3, 10), (0, 0, 0), fov=55)
+scene.add(Light3D.directional((0.4, -1, 0.3), intensity=1.0))   # light travels +z
+scene.add(Entity3D.box('floor', (0, -1, 0), (12, 0.4, 12), Material(Color(70, 80, 100))))
+scene.add(Entity3D.sphere('orb', (0, 1.4, 0), 1.6, material=Material(Color(80, 200, 255))))
+
+scene.render(HiResCanvas(80, 40))   # camera aspect is resolved per surface
+scene.save('room.json')              # ~3 kB: primitives are stored by name
+```
+
+```python
+# Whole-image effects, graded before the half-block fold
+import numpy as np
+from spore_engine import Image, Field, StarField, CellCache, Gradient, HiResCanvas
+
+W, HZ = 80, 24
+SKY = Gradient(Color(2, 3, 11), Color(4, 6, 21), Color(19, 32, 58))
+hr = HiResCanvas(W, HZ * 2)
+
+sky = Image.gradient('y', SKY, HZ, W)
+sky = sky.add(Field.radial(HZ, W, 54, 10, 4, power=1.4).tinted(Color(90, 255, 160)))
+sky = sky.add(StarField(300).draw(Image.zeros((HZ, W)), 2.0))
+
+# mirror the sky about the horizon, then absorb the water's own colour
+mirror = np.clip(HZ - 1 - np.arange(W) * 0.35, 0, HZ - 1).astype(int)
+water = sky.sample_rows(mirror).absorb(Color(4, 12, 24), 0.35)
+
+sky.stacked(water).tonemapped().bloomed().vignetted().to_cells(hr, cache=CellCache(HZ * 2, W))
+hr.to_canvas(c)          # one fold, at the very end
+```
+
 ## Documentation
 
 - [`wiki/usage.md`](wiki/usage.md) — Comprehensive usage guide
@@ -126,5 +163,5 @@ text, colors = image_to_glyph_colored('photo.jpg', width=80)
 
 - Python 3.10+
 - A terminal with ANSI truecolor support
-- No external Python dependencies
-- Optional: `ffmpeg` and `Pillow` for image/video/GIF conversion
+- `numpy` — the one hard requirement; the `sim/`, `gen/` and `fx/` layers are written against ndarrays, so there is no meaningful pure-Python fallback
+- Optional, and each degrades at import time rather than raising: `numba` and `scipy` (JIT/fast paths with pure-Python fallbacks), `Pillow` and `ffmpeg` (image/video/GIF conversion)

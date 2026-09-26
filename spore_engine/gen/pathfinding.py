@@ -1,8 +1,8 @@
 from __future__ import annotations
-import math, heapq
-from typing import Optional, Callable
+import math
+import heapq
 from ..core.canvas import Canvas
-from ..core.color import Color, GREEN, RED, YELLOW, DIM
+from ..core.color import Color, GREEN, RED, DIM
 
 
 class AStar:
@@ -24,7 +24,7 @@ class AStar:
 
     def from_tile_grid(self, tile_grid: list[list[int]],
                        walkable_values: set[int],
-                       costs: Optional[dict[int, float]] = None):
+                       costs: dict[int, float] | None = None):
         for y in range(min(len(tile_grid), self.h)):
             for x in range(min(len(tile_grid[0]), self.w)):
                 v = tile_grid[y][x]
@@ -62,7 +62,7 @@ class AStar:
             return []
 
         open_set = [(0, start)]
-        came_from: dict[tuple[int, int], Optional[tuple[int, int]]] = {start: None}
+        came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
         g_score: dict[tuple[int, int], float] = {start: 0}
         f_score: dict[tuple[int, int], float] = {start: self.heuristic(start, end)}
         visited_order: list[tuple[int, int]] = []

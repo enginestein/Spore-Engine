@@ -1,11 +1,14 @@
 from __future__ import annotations
-import math, json, struct, subprocess, os, tempfile, shutil
-from typing import Optional, Callable
+import math
+import json
+from collections.abc import Callable
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 class VideoFrame:
@@ -23,7 +26,7 @@ class FramePlayer:
         self._timer = 0.0
         self._playing = False
         self._done = False
-        self._on_frame: Optional[Callable] = None
+        self._on_frame: Callable | None = None
 
     def load_frames(self, frames: list[VideoFrame]):
         self.frames = frames
@@ -35,7 +38,7 @@ class FramePlayer:
         self.frames.append(frame)
 
     @property
-    def current_frame(self) -> Optional[VideoFrame]:
+    def current_frame(self) -> VideoFrame | None:
         if 0 <= self._idx < len(self.frames):
             return self.frames[self._idx]
         return None
@@ -118,7 +121,7 @@ class Video:
         self.width = width
         self.height = height
         self.fps = fps
-        self.frames: list[list[list[Optional[Color]]]] = []
+        self.frames: list[list[list[Color | None]]] = []
 
     @property
     def duration(self) -> float:
@@ -142,7 +145,7 @@ class Video:
             player.add_frame(VideoFrame(c))
         return player
 
-    def add_frame_data(self, data: list[list[Optional[Color]]]):
+    def add_frame_data(self, data: list[list[Color | None]]):
         self.frames.append(data)
 
     def from_canvas_sequence(self, canvases: list[Canvas]):
@@ -150,9 +153,9 @@ class Video:
             if self.width == 0:
                 self.width = c.width
                 self.height = c.height
-            data: list[list[Optional[Color]]] = []
+            data: list[list[Color | None]] = []
             for y in range(c.height):
-                row: list[Optional[Color]] = []
+                row: list[Color | None] = []
                 for x in range(c.width):
                     row.append(c.buffer[y][x].fg)
                 data.append(row)
@@ -201,9 +204,9 @@ def make_test_video(w: int, h: int, num_frames: int = 60, fps: float = 15) -> Vi
     v = Video(w, h, fps)
     for fi in range(num_frames):
         t = fi / fps
-        frame: list[list[Optional[Color]]] = []
+        frame: list[list[Color | None]] = []
         for y in range(h):
-            row: list[Optional[Color]] = []
+            row: list[Color | None] = []
             for x in range(w):
                 nx, ny = x / w, y / h
                 v1 = math.sin(nx * 6 + t * 2) * math.cos(ny * 4 + t * 1.5)
@@ -228,9 +231,9 @@ def make_color_bars(w: int, h: int, num_frames: int = 30, fps: float = 10) -> Vi
     ]
     for fi in range(num_frames):
         t = fi / fps
-        frame: list[list[Optional[Color]]] = []
+        frame: list[list[Color | None]] = []
         for y in range(h):
-            row: list[Optional[Color]] = []
+            row: list[Color | None] = []
             offset = int(t * 2 * w / len(bars)) % w
             for x in range(w):
                 bi = ((x + offset) * len(bars)) // w
@@ -248,10 +251,10 @@ def make_spinning_donut_video(w: int, h: int, num_frames: int = 60, fps: float =
         t = fi / fps
         A = t * 1.5
         B = t * 0.8
-        frame: list[list[Optional[Color]]] = []
+        frame: list[list[Color | None]] = []
         zb = [[0.0] * w for _ in range(h)]
-        for iy in range(h):
-            row: list[Optional[Color]] = [None] * w
+        for _iy in range(h):
+            row: list[Color | None] = [None] * w
             frame.append(row)
         theta = 0.0
         while theta < 2 * math.pi:

@@ -22,7 +22,7 @@ running component class.
 """
 
 from __future__ import annotations
-from typing import Iterator, Optional
+from collections.abc import Iterator
 
 from .canvas import Canvas
 from .scene import Scene
@@ -42,7 +42,7 @@ class Component:
 class EcsEntity:
     """One game object: an id plus its components, keyed by component type."""
 
-    __slots__ = ('world', 'id', 'components')
+    __slots__ = ('components', 'id', 'world')
 
     def __init__(self, world: World, eid: int):
         self.world = world
@@ -88,7 +88,7 @@ class World:
         entity.world = self
         return entity
 
-    def e(self, eid: int) -> Optional[EcsEntity]:
+    def e(self, eid: int) -> EcsEntity | None:
         return self._entities.get(eid)
 
     def has(self, eid: int) -> bool:
@@ -149,7 +149,7 @@ class SpriteComponent(Component):
     """Drawable: a core Sprite plus optional colour overrides for this entity."""
 
     def __init__(self, sprite: Sprite, fg=None, bg=None,
-                 transparent: Optional[str] = ' ', z: Optional[float] = None):
+                 transparent: str | None = ' ', z: float | None = None):
         super().__init__('sprite')
         self.sprite = sprite
         self.fg = fg
@@ -167,15 +167,15 @@ class SpriteRenderSystem(System):
     unset; ``transform.z`` then takes precedence through the component default.
     """
 
-    def __init__(self, scene: Optional[Scene] = None,
-                 layer: Optional[str] = None, priority: int = 0,
+    def __init__(self, scene: Scene | None = None,
+                 layer: str | None = None, priority: int = 0,
                  z: float = 0):
         super().__init__(priority)
         self.scene = scene
         self.layer = layer
         self.z = z
 
-    def target(self) -> Optional[Canvas]:
+    def target(self) -> Canvas | None:
         if self.scene is None:
             return None
         if self.layer is not None:

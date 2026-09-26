@@ -1,11 +1,13 @@
 from __future__ import annotations
-import math, random
-from typing import Optional
+import math
+import random
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 class VolumetricFog:
@@ -31,10 +33,22 @@ class VolumetricFog:
                 if val > 0.7:
                     self.fog_grid[y][x] = min(1, self.fog_grid[y][x] + val * 0.02 * self.density)
 
-    def apply(self, canvas: Canvas, light_pos: Optional[tuple[int, int]] = None):
-        for y in range(self.h):
-            for x in range(self.w):
-                density = self.fog_grid[y][x]
+    def apply(self, canvas: Canvas, light_pos: tuple[int, int] | None = None):
+        """Composite the fog field over whatever canvas is handed in.
+
+        The fog grid is sized when the object is constructed, but the canvas
+        is not - terminals get resized. The previous version iterated the
+        grid and indexed the canvas directly, so any size mismatch raised
+        IndexError. The field is now sampled with nearest-neighbour scaling,
+        so a fog built for 80x24 still covers a 12x6 buffer.
+        """
+        if not self.w or not self.h or not canvas.w or not canvas.h:
+            return
+        for y in range(canvas.h):
+            gy = min(self.h - 1, y * self.h // canvas.h)
+            grid_row = self.fog_grid[gy]
+            for x in range(canvas.w):
+                density = grid_row[min(self.w - 1, x * self.w // canvas.w)]
                 if density < 0.01:
                     continue
                 cell = canvas.buffer[y][x]
@@ -45,7 +59,7 @@ class VolumetricFog:
                     dist = math.hypot(x - lx, y - ly)
                     density *= max(0, 1 - dist / 40)
                 lum = cell.fg.luminance
-                blended = int(lum * (1 - density * 0.5) + 200 * density * 0.5)
+                int(lum * (1 - density * 0.5) + 200 * density * 0.5)
                 r = min(255, int(cell.fg.r * (1 - density * 0.4) + self.color.r * density * 0.4))
                 g = min(255, int(cell.fg.g * (1 - density * 0.4) + self.color.g * density * 0.4))
                 b = min(255, int(cell.fg.b * (1 - density * 0.4) + self.color.b * density * 0.4))
@@ -62,7 +76,7 @@ class VolumetricFog:
 
 class LightCone:
     def __init__(self, x: float, y: float, angle: float, width: float,
-                 length: float, color: Optional[Color] = None):
+                 length: float, color: Color | None = None):
         self.x = x
         self.y = y
         self.angle = angle
@@ -77,7 +91,7 @@ class LightCone:
             self.flicker += dt * 5
             self.intensity = 0.6 + math.sin(self.flicker) * flicker_amp
 
-    def apply(self, canvas: Canvas, height_map: Optional[list[list[float]]] = None):
+    def apply(self, canvas: Canvas, height_map: list[list[float]] | None = None):
         cx, cy = self.x, self.y
         for angle_step in range(int(self.width * 10)):
             a = self.angle - self.width / 2 + angle_step / 10
@@ -107,7 +121,7 @@ class LightCone:
 
 
 class SmokePlume:
-    def __init__(self, x: float, y: float, color: Optional[Color] = None):
+    def __init__(self, x: float, y: float, color: Color | None = None):
         self.x = x
         self.y = y
         self.color = color or Color(150, 150, 160)
@@ -170,7 +184,7 @@ class VolumetricRenderer:
             p.update(dt)
 
     def render(self, canvas: Canvas, apply_to_scene: bool = True,
-               height_map: Optional[list[list[float]]] = None):
+               height_map: list[list[float]] | None = None):
         for c in self.cones:
             c.apply(canvas, height_map)
         for p in self.plumes:

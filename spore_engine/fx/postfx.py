@@ -1,13 +1,67 @@
 from __future__ import annotations
 import math
-from typing import Optional
 import numpy as np
-from scipy.ndimage import uniform_filter, maximum_filter, sobel
 from ..core.canvas import Canvas
-from ..core.color import Color, WHITE, DIM
+from ..core.glyphs import SHADE_CHARS
+from ..core.color import Color, WHITE
+
+try:  # scipy is optional: the `fx` extra installs it for speed.
+    from scipy.ndimage import uniform_filter, maximum_filter, sobel
+    SCIPY_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised via the no-scipy test
+    SCIPY_AVAILABLE = False
+
+    def _windows(a: np.ndarray, size: int):
+        """Stack every size x size window over a zero-padded array."""
+        half = size // 2
+        padded = np.pad(a, half, mode='constant', constant_values=0)
+        view = np.lib.stride_tricks.sliding_window_view(padded, (size, size))
+        # The padding was chosen so this is already the original shape.
+        assert view.shape[:2] == a.shape
+        return view.reshape(*a.shape, size * size)
+
+    def uniform_filter(a: np.ndarray, size: int = 3, mode: str = 'constant',
+                       cval: float = 0.0) -> np.ndarray:
+        """Box mean over a size x size window, matching scipy's border mode.
+
+        The padded cells count in the divisor, which is what scipy does with
+        mode='constant': a 3x3 window at the border divides by 9, not by the
+        number of cells that happened to be inside the image.
+        """
+        return _windows(np.asarray(a, dtype=np.float64), size).mean(axis=-1)
+
+    def maximum_filter(a: np.ndarray, size: int = 3, mode: str = 'constant',
+                       cval: float = 0.0) -> np.ndarray:
+        """Local maximum over a size x size window."""
+        return _windows(np.asarray(a, dtype=np.float64), size).max(axis=-1)
+
+    _SOBEL_Y = np.array([[-1.0, -2.0, -1.0],
+                         [0.0, 0.0, 0.0],
+                         [1.0, 2.0, 1.0]])
+    _SOBEL_X = _SOBEL_Y.T
+
+    def sobel(a: np.ndarray, axis: int = -1, mode: str = 'constant',
+              cval: float = 0.0) -> np.ndarray:
+        """3x3 Sobel derivative along ``axis``, zero padded, as scipy does.
+
+        When the differentiated axis is shorter than 3 the kernel still
+        applies with zero padding, which is what scipy does too (it produces
+        all zeros for a 1-cell axis, since the middle kernel row is zero).
+        """
+        a = np.asarray(a, dtype=np.float64)
+        if a.ndim != 2:
+            raise ValueError(f'sobel fallback handles 2-D input, got {a.ndim}-D')
+        k = _SOBEL_Y if axis in (0, -2) else _SOBEL_X
+        p = np.pad(a, 1, mode='constant', constant_values=0.0)
+        out = np.zeros_like(a)
+        for i in range(3):
+            for j in range(3):
+                out += k[i, j] * p[i:i + a.shape[0], j:j + a.shape[1]]
+        return out
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 def _extract_fg(canvas: Canvas) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -43,7 +97,7 @@ def _clamp(arr: np.ndarray) -> np.ndarray:
 
 
 def box_blur(canvas: Canvas, radius: int = 1):
-    w, h = canvas.width, canvas.height
+    _w, _h = canvas.width, canvas.height
     if radius < 1:
         return
     r, g, b, mask = _extract_fg(canvas)
@@ -78,7 +132,7 @@ def glow(canvas: Canvas, threshold: float = 0.6, radius: int = 2, intensity: flo
                     canvas.set_pixel(x, y, SHADE[int(val * 9)], WHITE.mul(val))
 
 
-def edge_detect(canvas: Canvas, fg: Optional[Color] = None, threshold: float = 0.15):
+def edge_detect(canvas: Canvas, fg: Color | None = None, threshold: float = 0.15):
     w, h = canvas.width, canvas.height
     edge_color = fg or Color(0, 255, 255)
     _, _, _, mask = _extract_fg(canvas)
@@ -101,7 +155,7 @@ def edge_detect(canvas: Canvas, fg: Optional[Color] = None, threshold: float = 0
                                  z=(canvas.get_pixel(x, y).z + 1 if canvas.get_pixel(x, y) else 0))
 
 
-def dither(canvas: Canvas, palette: Optional[list[Color]] = None):
+def dither(canvas: Canvas, palette: list[Color] | None = None):
     pal = palette or [Color(0, 0, 0), Color(255, 255, 255), Color(255, 0, 0),
                       Color(0, 255, 0), Color(0, 0, 255), Color(255, 255, 0)]
     pal_np = np.array([[c.r, c.g, c.b] for c in pal], dtype=np.int32)
@@ -159,7 +213,7 @@ def vignette(canvas: Canvas, intensity: float = 0.5):
 
 
 def chromatic_aberration(canvas: Canvas, offset: int = 1):
-    w, h = canvas.width, canvas.height
+    w, _h = canvas.width, canvas.height
     r, g, b, mask = _extract_fg(canvas)
     r_shift = np.zeros_like(r)
     b_shift = np.zeros_like(b)
@@ -196,9 +250,9 @@ def pixelate(canvas: Canvas, block_size: int = 3):
             x1, x2 = bx, min(bx + block_size, w)
             sub_count = count[y1:y2, x1:x2].sum()
             if sub_count > 0:
-                avg_r = int(round(r[y1:y2, x1:x2].sum() / sub_count))
-                avg_g = int(round(g[y1:y2, x1:x2].sum() / sub_count))
-                avg_b = int(round(b[y1:y2, x1:x2].sum() / sub_count))
+                avg_r = round(r[y1:y2, x1:x2].sum() / sub_count)
+                avg_g = round(g[y1:y2, x1:x2].sum() / sub_count)
+                avg_b = round(b[y1:y2, x1:x2].sum() / sub_count)
                 for y in range(y1, y2):
                     for x in range(x1, x2):
                         if buf[y][x].fg:

@@ -1,5 +1,6 @@
 from __future__ import annotations
-import math, random
+import math
+import random
 from typing import Optional
 from ..core.color import Color, BLACK, WHITE
 from ..core.util import clamp
@@ -40,7 +41,7 @@ def flash(canvas, alpha: float, z: float = 1000):
     a = max(0, min(1, alpha))
     if a <= 0:
         return
-    col = Color(int(255 * a), int(255 * a), int(255 * a))
+    Color(int(255 * a), int(255 * a), int(255 * a))
     for y in range(canvas.h):
         for x in range(canvas.w):
             c = canvas.buffer[y][x]
@@ -77,25 +78,11 @@ def color_overlay(canvas, color: Color, alpha: float = 0.3, z: float = 1000):
                 c.fg = c.fg.blend(color, a)
 
 
-def vignette(canvas, radius: Optional[float] = None, z: float = 1000):
-    cx, cy = canvas.w / 2, canvas.h / 2
-    max_d = math.hypot(cx, cy)
-    r = radius or max_d
-    for y in range(canvas.h):
-        for x in range(canvas.w):
-            d = math.hypot(x - cx, y - cy) / r
-            if d > 1: d = 1
-            c = canvas.buffer[y][x]
-            if c.fg is not None:
-                c.fg = c.fg.mul(1 - d * 0.5)
-
-
-def scanlines(canvas, intensity: float = 0.3):
-    for y in range(0, canvas.h, 2):
-        for x in range(canvas.w):
-            c = canvas.buffer[y][x]
-            if c.fg is not None:
-                c.fg = c.fg.mul(1 - intensity)
+# ``vignette`` and ``scanlines`` used to be defined here *and* in
+# :mod:`spore_engine.fx.postfx`, with different signatures - which one you got
+# depended on the import path. They are re-exported from postfx so there is a
+# single implementation and a single signature.
+from .postfx import scanlines, vignette
 
 
 class ScreenFX:

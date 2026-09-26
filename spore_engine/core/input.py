@@ -4,7 +4,7 @@ import select
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Union
 
 try:
     import termios
@@ -14,6 +14,14 @@ except ImportError:  # e.g. Windows / non-POSIX Python
     termios = None
     tty = None
     _HAVE_TERMIOS = False
+
+#: Whether raw terminal mode is available on this platform. Raw mode requires
+#: POSIX ``termios``; on Windows the module still imports and ``poll()`` /
+#: ``get()`` work on already-cooked streams, but :meth:`Input.enter_raw` raises
+#: a clear ``RuntimeError``. Every module in the package guards its
+#: ``termios``/``tty`` import this way, so ``import spore_engine`` works
+#: everywhere.
+HAVE_TERMIOS = _HAVE_TERMIOS
 
 KEY_UP = 'up'
 KEY_DOWN = 'down'
@@ -78,7 +86,37 @@ class ResizeEvent:
     height: int
 
 
-InputEvent = Union[KeyEvent, MouseEvent, ResizeEvent]
+InputEvent = Union[KeyEvent, MouseEvent, ResizeEvent]  # noqa: UP007  (runtime alias)
+
+__all__ = [
+    'HAVE_TERMIOS',
+    'KEY_BACKSPACE',
+    'KEY_CTRL_C',
+    'KEY_CTRL_D',
+    'KEY_CTRL_Z',
+    'KEY_DELETE',
+    'KEY_DOWN',
+    'KEY_END',
+    'KEY_ENTER',
+    'KEY_ESCAPE',
+    'KEY_HOME',
+    'KEY_INSERT',
+    'KEY_LEFT',
+    'KEY_PAGE_DOWN',
+    'KEY_PAGE_UP',
+    'KEY_RIGHT',
+    'KEY_SHIFT_TAB',
+    'KEY_SPACE',
+    'KEY_TAB',
+    'KEY_UP',
+    'Input',
+    'InputEvent',
+    'KeyEvent',
+    'KeyState',
+    'MouseEvent',
+    'ResizeEvent',
+    'open_input',
+]
 
 
 class Input:
@@ -111,8 +149,15 @@ class Input:
     Mouse tracking (``enable_mouse()``) decodes SGR mouse reports into
     ``MouseEvent`` (buttons, motion and wheel); terminal resize reports and
     polling both become ``ResizeEvent``. Raw mode requires ``termios``
-    (POSIX); on non-POSIX platforms the module still imports and
-    ``poll()``/``get()`` work on already-cooked input streams.
+    (POSIX). On non-POSIX platforms the module still imports and
+    ``poll()``/``get()`` work on already-cooked input streams, but
+    ``enter_raw()`` raises a clear ``RuntimeError``; check
+    :data:`HAVE_TERMIOS` to branch up front.
+
+    Terminal size is polled (not signalled): :meth:`events` re-checks
+    ``os.get_terminal_size`` at most every 0.25 s and emits a
+    ``ResizeEvent`` when it changes, so callers must act on the event - the
+    engine does not resize any surface for you.
     """
 
     def __init__(self, fd: int = 0, clock=None, release_delay: float = 0.20,
@@ -125,10 +170,14 @@ class Input:
         self._released_at: dict[str, float] = {}
         self._mouse = mouse
         self._enabled_mouse = False
-        self._last_size: Optional[tuple[int, int]] = None
+        self._last_size: tuple[int, int] | None = None
         self._size_check = 0.0
         self._saved = None
         self._raw = 0
+        self._pending: list[str] = []
+        self._utf8_pending: list[int] = []
+        self._utf8_need = 0
+        self._pushback: int | None = None
 
     # -- terminal state --------------------------------------------------
 
@@ -153,11 +202,25 @@ class Input:
                 "raw terminal mode requires termios (POSIX / Unix-like "
                 "platforms); on Windows terminals, run through SSH or use "
                 "the cooked ``poll()`` path instead")
-        self._saved = termios.tcgetattr(self.fd)
-        tty.setraw(self.fd)
+        # Only snapshot the attributes on the *first* entry. Re-reading them on
+        # a nested enter_raw() saved the already-raw state, so the matching
+        # exit_raw() put the terminal back into raw mode: no echo, no Ctrl-C,
+        # and a broken shell after the program exited.
+        if self._raw == 0:
+            if not self.isatty:
+                raise RuntimeError(
+                    f"file descriptor {self.fd} is not a terminal, so raw mode "
+                    "cannot be enabled; use the cooked poll() path instead")
+            try:
+                self._saved = termios.tcgetattr(self.fd)
+            except (termios.error, OSError, ValueError) as exc:
+                raise RuntimeError(
+                    f"could not read terminal attributes for fd {self.fd}: "
+                    f"{exc}") from exc
+            tty.setraw(self.fd)
+            if self._mouse:
+                self.enable_mouse()
         self._raw += 1
-        if self._mouse:
-            self.enable_mouse()
 
     def exit_raw(self):
         if not self._raw:
@@ -213,7 +276,7 @@ class Input:
         except (OSError, ValueError):  # non-socket fd on Windows, closed fd
             return False
 
-    def _read_byte(self, timeout: Optional[float]) -> int | None:
+    def _read_byte(self, timeout: float | None) -> int | None:
         try:
             if select.select([self.fd], [], [], timeout)[0]:
                 data = os.read(self.fd, 1)
@@ -286,6 +349,8 @@ class Input:
                 return ('key', KEY_ESCAPE)
 
         p = params.replace(';', '')
+        # Keep modifier-aware params when there are semicolons (e.g. "1;5~" for Ctrl+Home)
+        # The existing tests/behaviour for no-modifier sequences still work.
         if final == 'A': return ('key', KEY_UP)
         if final == 'B': return ('key', KEY_DOWN)
         if final == 'C': return ('key', KEY_RIGHT)
@@ -294,7 +359,10 @@ class Input:
         if final == 'F': return ('key', KEY_END)
         if final == 'Z': return ('key', KEY_SHIFT_TAB)
         if final == '~':
-            n = p
+            # Parse CSI modifier sequences: "1;5~" means key=1, modifier=5 (Ctrl).
+            # The first param is the key code; subsequent params are modifiers.
+            param_parts = params.split(';')
+            n = param_parts[0].strip() if param_parts else p
             if n == '1' or n == '7': return ('key', KEY_HOME)
             if n == '2': return ('key', KEY_INSERT)
             if n == '3': return ('key', KEY_DELETE)
@@ -306,6 +374,7 @@ class Input:
                 return ('key', _F1_TO_F12[('11', '12', '13', '14', '15', '17',
                                            '18', '19', '20', '21', '23', '24').index(n)])
         return ('key', KEY_ESCAPE)
+
 
     def _read_ss3(self):
         b = self._read_byte(0.02)
@@ -322,7 +391,8 @@ class Input:
         return ('key', KEY_ESCAPE)
 
     def _sgr_mouse(self, cb: int, x: int, y: int, final: str) -> MouseEvent:
-        mods = dict(shift=bool(cb & 0x04), alt=bool(cb & 0x08), ctrl=bool(cb & 0x10))
+        mods = {'shift': bool(cb & 0x04), 'alt': bool(cb & 0x08),
+                'ctrl': bool(cb & 0x10)}
         if cb & 0x40:
             # Scroll-wheel codes 64-67 set bit 6; bits 0-1 are the direction
             # (0 up, 1 down, 2 right, 3 left), bits 2-4 the modifiers.
@@ -357,21 +427,74 @@ class Input:
             return MouseEvent(x, y, button=cb & 0x03, action='move', shift=bool(cb & 0x04))
         return MouseEvent(x, y, button=cb & 0x03, action='press', shift=bool(cb & 0x04))
 
-    def _decode_utf8(self, first: int) -> str:
-        if first < 0x80:
-            return chr(first)
-        n = 1 if first >> 5 == 0b110 else (2 if first >> 4 == 0b1110 else (3 if first >> 3 == 0b11110 else 0))
-        tail = [self._read_byte(0.0) for _ in range(n)]
-        expected = [b for b in tail if b is not None]
-        if len(expected) != len(tail):
-            return chr(first)
-        data = bytes([first] + expected)
-        return data.decode('utf-8', 'replace')
+    def _utf8_lead_len(self, first: int) -> int:
+        """How many continuation bytes follow this lead byte (0 = invalid)."""
+        if (first >> 5) == 0b110:      # 2-byte, e.g. é
+            return 1
+        if (first >> 4) == 0b1110:     # 3-byte
+            return 2
+        if (first >> 3) == 0b11110:    # 4-byte, e.g. an emoji
+            return 3
+        return 0
 
-    def _read_sequence(self, timeout: Optional[float]):
+    def _complete_utf8(self, timeout: float | None):
+        """Finish the sequence parked in ``_utf8_pending``.
+
+        A multi-byte character can be split across two reads, and the old
+        decoder gave up on the incomplete one and returned ``chr(lead)`` - a
+        latin-1 reading of the lead byte, so '😀' arrived as 'ð' followed by
+        three phantom key presses. The partial sequence is now held until its
+        continuation bytes turn up.
+        """
+        seq = self._utf8_pending
+        need = self._utf8_need
+        wait = timeout if timeout else 0.02
+        while len(seq) <= need:
+            nb = self._read_byte(wait)
+            if nb is None:
+                return None
+            if not 0x80 <= nb <= 0xBF:
+                # Not a continuation byte, so it belongs to the next key. It
+                # used to be swallowed into this sequence, losing a keystroke.
+                self._pushback = nb
+                self._utf8_pending = []
+                return ('key', '�')
+            seq.append(nb)
+        self._utf8_pending = []
+        try:
+            return ('key', bytes(seq).decode('utf-8'))
+        except UnicodeDecodeError:
+            return ('key', '�')
+
+    def _decode_utf8(self, first: int) -> str:
+        """Decode one character starting at the lead byte ``first``."""
+        need = self._utf8_lead_len(first)
+        if need == 0:
+            # A lone continuation byte, or a stray high byte.
+            return '�'
+        self._utf8_pending = [first]
+        self._utf8_need = need
+        got = self._complete_utf8(0.0)
+        if got is None:
+            return ''
+        return got[1]
+
+    def _read_sequence(self, timeout: float | None):
+        if self._pushback is not None:
+            b, self._pushback = self._pushback, None
+            return self._read_sequence_byte(b, timeout)
+        if self._utf8_pending:
+            # Finish the parked character before looking for a new one.
+            got = self._complete_utf8(timeout)
+            if got is not None:
+                return got
+            return None
         b = self._read_byte(timeout)
         if b is None:
             return None
+        return self._read_sequence_byte(b, timeout)
+
+    def _read_sequence_byte(self, b: int, timeout: float | None):
         if b == 0x1B:
             return self._read_escape()
         if b in (0x0D, 0x0A):
@@ -390,12 +513,16 @@ class Input:
             return ('key', KEY_CTRL_Z)
         if b < 0x20:
             return ('key', chr(b))
-        try:
-            return ('key', self._decode_utf8(b))
-        except Exception:
+        if b < 0x80:
             return ('key', chr(b))
+        need = self._utf8_lead_len(b)
+        if need == 0:
+            return ('key', '�')
+        self._utf8_pending = [b]
+        self._utf8_need = need
+        return self._complete_utf8(timeout)
 
-    def _drain(self, timeout: Optional[float] = 0.0):
+    def _drain(self, timeout: float | None = 0.0):
         tokens = []
         while True:
             tok = self._read_sequence(0.0)
@@ -416,7 +543,7 @@ class Input:
 
     # -- public event API ------------------------------------------------
 
-    def events(self, timeout: Optional[float] = 0.0) -> list[InputEvent]:
+    def events(self, timeout: float | None = 0.0) -> list[InputEvent]:
         """Read all pending input as a list of KeyEvent / MouseEvent /
         ResizeEvent. Blocks up to ``timeout`` seconds (None = forever) for
         the first event, then drains anything else available.
@@ -468,17 +595,29 @@ class Input:
             out.append(ResizeEvent(*size))
         self._last_size = size
 
-    def poll(self, timeout: Optional[float] = 0.0) -> str | None:
+    def poll(self, timeout: float | None = 0.0) -> str | None:
         """Read the next key *press* (or terminal repeat) name, blocking up
         to ``timeout`` seconds; None if nothing arrived. Synthesized releases
         and mouse/resize events are consumed internally, not returned -
-        call :meth:`events` for the full stream."""
-        for ev in self.events(timeout):
-            if isinstance(ev, KeyEvent) and ev.down:
-                return ev.key
-        return None
+        call :meth:`events` for the full stream.
 
-    def get(self, timeout: Optional[float] = None) -> str | None:
+        Presses that arrive in the same read as the one being returned are
+        queued and handed out by the following calls. ``events()`` drains
+        everything available, so without the queue a burst of six fast
+        keystrokes collapsed to a single readable key and the other five were
+        lost.
+        """
+        while True:
+            if self._pending:
+                return self._pending.pop(0)
+            for ev in self.events(timeout):
+                if isinstance(ev, KeyEvent) and ev.down:
+                    self._pending.append(ev.key)
+            timeout = 0.0
+            if not self._pending:
+                return None
+
+    def get(self, timeout: float | None = None) -> str | None:
         """Block until a key press is available and return its name."""
         return self.poll(timeout)
 

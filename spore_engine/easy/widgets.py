@@ -1,4 +1,4 @@
-from ..core.color import Color, WHITE, BLACK, DIM
+from ..core.color import Color, WHITE
 from .sprite import GameSprite
 
 
@@ -95,7 +95,7 @@ class SimpleDialog:
         msg_lines = self.message.split('\n') if isinstance(self.message, str) else [self.message]
         for i, line in enumerate(msg_lines):
             canvas.draw_text(cx + 2, cy + 3 + i, str(line), Color(180, 180, 200), z=101)
-        for i, (label, result) in enumerate(self._buttons):
+        for i, (label, _result) in enumerate(self._buttons):
             bx = cx + 2 + i * (len(str(label)) + 4)
             by = cy + h - 2
             canvas.draw_text(bx, by, f"[ {label} ]", WHITE, z=101)

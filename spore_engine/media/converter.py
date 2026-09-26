@@ -1,31 +1,63 @@
 from __future__ import annotations
-import math, os, subprocess, tempfile, shutil, json
-from typing import Optional
+import os
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color
-from .video import Video, VideoFrame, FramePlayer
+from ..core.term import CHAR_ASPECT
+from .ffmpeg import (FFmpegError, FFmpegPipe, probe_duration, probe_fps, probe_size)
+from .video import Video, FramePlayer
+
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
+SHADE_REV = SHADE_CHARS[::-1]
 
 
-SHADE = ' .:-=+*#%@'
-SHADE_REV = '@%#*+=-:. '
+def _aspect_height(width: int, src_w: int, src_h: int) -> int:
+    """Rows for a target width that keeps the source's aspect undistorted.
+
+    A terminal cell is taller than it is wide, so a naively square mapping
+    stretches the image vertically. The correction factor comes from
+    :data:`~spore_engine.core.term.CHAR_ASPECT` rather than a literal 0.45
+    repeated at each call site.
+    """
+    return max(1, int(width * (src_h / src_w) * CHAR_ASPECT))
+
 
 
 # -------------------------------------------------------------------
 # IMAGE -> ASCII
 # -------------------------------------------------------------------
 
-def image_to_canvas(path: str, width: int = 80, height: Optional[int] = None,
+def image_to_canvas(path: str, width: int = 80, height: int | None = None,
                     invert: bool = False, color: bool = True) -> Canvas:
-    """Load an image file and convert to an ASCII Canvas via ffmpeg/PIL."""
+    """Load an image file and convert to an ASCII Canvas.
+
+    Uses pillow when installed and falls back to ffmpeg otherwise, so neither
+    is a hard dependency. Raises a typed error if neither can decode the file
+    rather than returning a blank canvas.
+
+    ``invert`` means different things in the two modes, because there is
+    nothing to invert in one of them:
+
+    - ``color=True`` (the default) writes the source RGB as the foreground, so
+      ``invert`` inverts those channels. It previously did nothing at all in
+      this mode, because the glyph was a constant ``'@'`` and there was no
+      ramp to reverse.
+    - ``color=False`` packs brightness into the glyph, so ``invert`` reverses
+      the shade ramp instead.
+    """
     try:
         from PIL import Image
     except ImportError:
         return _image_to_canvas_ffmpeg(path, width, height, invert, color)
 
-    img = Image.open(path).convert('RGB')
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f'image file not found: {path}')
+    with Image.open(path) as src:
+        img = src.convert('RGB')
     iw, ih = img.size
     if height is None:
-        height = max(1, int(width * (ih / iw) * 0.45))
+        height = _aspect_height(width, iw, ih)
     img = img.resize((width, height), Image.LANCZOS)
 
     c = Canvas(width, height)
@@ -36,6 +68,8 @@ def image_to_canvas(path: str, width: int = 80, height: Optional[int] = None,
             r, g, b = img.getpixel((x, y))
             col = Color(r, g, b)
             if color:
+                if invert:
+                    col = Color(255 - r, 255 - g, 255 - b)
                 c.set_pixel(x, y, '@', col)
             else:
                 lum = col.luminance / 255
@@ -44,25 +78,19 @@ def image_to_canvas(path: str, width: int = 80, height: Optional[int] = None,
     return c
 
 
-def _image_to_canvas_ffmpeg(path: str, width: int = 80, height: Optional[int] = None,
+def _image_to_canvas_ffmpeg(path: str, width: int = 80, height: int | None = None,
                              invert: bool = False, color: bool = True) -> Canvas:
     """Fallback: use ffmpeg to decode a single image to raw RGB."""
-    try:
-        pipe = subprocess.Popen(
-            ['ffmpeg', '-v', '0', '-i', path,
-             '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        data = pipe.stdout.read()
-        pipe.wait()
-    except FileNotFoundError:
-        raise RuntimeError('Neither PIL nor ffmpeg is available')
+    iw, ih = probe_size(path)
+    with FFmpegPipe(['-v', '0', '-i', path,
+                     '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']) as pipe:
+        data = pipe.read_all()
 
     if not data:
-        raise ValueError(f'Could not decode image: {path}')
+        raise FFmpegError(f'ffmpeg decoded no pixels from {path}')
 
-    iw, ih = _probe_size(path)
     if height is None:
-        height = max(1, int(width * (ih / iw) * 0.45))
+        height = _aspect_height(width, iw, ih)
 
     c = Canvas(width, height)
     shade = SHADE_REV if invert else SHADE
@@ -76,6 +104,8 @@ def _image_to_canvas_ffmpeg(path: str, width: int = 80, height: Optional[int] = 
                 r, g, b = data[idx], data[idx + 1], data[idx + 2]
                 col = Color(r, g, b)
                 if color:
+                    if invert:
+                        col = Color(255 - r, 255 - g, 255 - b)
                     c.set_pixel(x, y, '@', col)
                 else:
                     lum = col.luminance / 255
@@ -88,34 +118,15 @@ def _image_to_canvas_ffmpeg(path: str, width: int = 80, height: Optional[int] = 
 # VIDEO -> ASCII
 # -------------------------------------------------------------------
 
-def _probe_size(path: str) -> tuple[int, int]:
-    try:
-        out = subprocess.check_output(
-            ['ffprobe', '-v', '0', '-select_streams', 'v:0',
-             '-show_entries', 'stream=width,height',
-             '-of', 'csv=p=0', path])
-        parts = out.decode().strip().split(',')
-        return int(parts[0]), int(parts[1])
-    except Exception:
-        return (0, 0)
+# Kept as module-level aliases so the old private names still resolve.
+_probe_size = probe_size
+_probe_fps = probe_fps
 
 
-def _probe_fps(path: str) -> float:
-    try:
-        out = subprocess.check_output(
-            ['ffprobe', '-v', '0', '-select_streams', 'v:0',
-             '-show_entries', 'stream=r_frame_rate',
-             '-of', 'csv=p=0', path])
-        parts = out.decode().strip().split('/')
-        return float(parts[0]) / float(parts[1]) if len(parts) == 2 else 30.0
-    except Exception:
-        return 30.0
-
-
-def video_to_ascii(path: str, width: int = 80, height: Optional[int] = None,
-                   fps: Optional[float] = None, max_frames: int = 0,
+def video_to_ascii(path: str, width: int = 80, height: int | None = None,
+                   fps: float | None = None, max_frames: int = 0,
                    invert: bool = False, color: bool = True,
-                   on_progress: Optional[callable] = None) -> Video:
+                   on_progress: callable | None = None) -> Video:
     """Convert a video file to an ASCII Video using ffmpeg.
 
     Args:
@@ -130,92 +141,94 @@ def video_to_ascii(path: str, width: int = 80, height: Optional[int] = None,
 
     Returns:
         Video object ready for .to_player()
+
+    Raises:
+        FFmpegUnavailable: ffmpeg/ffprobe is not installed.
+        FFmpegError: the file has no decodable video stream, or ffmpeg
+            produced no frames. A zero-frame result used to be returned as an
+            empty Video, which then divided by zero in FramePlayer.
+
+    The ffmpeg process is always killed and reaped, including when
+    ``on_progress`` raises or ``max_frames`` cuts the read short.
     """
-    iw, ih = _probe_size(path)
-    src_fps = _probe_fps(path)
+    iw, ih = probe_size(path)
+    src_fps = probe_fps(path)
     if height is None:
-        height = max(1, int(width * (ih / iw) * 0.45))
+        height = _aspect_height(width, iw, ih)
     if fps is None:
         fps = src_fps
+    if fps <= 0:
+        raise ValueError(f'fps must be positive, got {fps}')
 
-    shade = SHADE_REV if invert else SHADE
     v = Video(width, height, fps)
 
     fps_filter = f'fps={fps}' if fps != src_fps else ''
 
-    cmd = ['ffmpeg', '-v', '0', '-i', path]
+    cmd = ['-v', '0', '-i', path]
     if fps_filter:
         cmd += ['-vf', fps_filter]
     cmd += ['-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']
 
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL)
-    except FileNotFoundError:
-        raise RuntimeError('ffmpeg is required for video conversion')
-
-    frame_size = iw * ih * 3
-    frame_count = 0
+    duration = probe_duration(path)
     total_frames_expected = 0
-
-    try:
-        dur_out = subprocess.check_output(
-            ['ffprobe', '-v', '0', '-show_entries', 'format=duration',
-             '-of', 'csv=p=0', path])
-        duration = float(dur_out.decode().strip())
+    if duration > 0:
         total_frames_expected = int(duration * fps)
         if max_frames > 0:
             total_frames_expected = min(total_frames_expected, max_frames)
-    except Exception:
-        total_frames_expected = 0
 
-    while True:
-        raw = proc.stdout.read(frame_size)
-        if not raw or len(raw) < frame_size:
-            break
+    frame_size = iw * ih * 3
+    frame_count = 0
 
-        frame_data: list[list[Optional[Color]]] = []
-        for y in range(ih):
-            row: list[Optional[Color]] = []
-            for x in range(iw):
-                idx = (y * iw + x) * 3
-                row.append(Color(raw[idx], raw[idx + 1], raw[idx + 2]))
-            frame_data.append(row)
+    with FFmpegPipe(cmd) as pipe:
+        while True:
+            raw = pipe.read(frame_size)
+            if not raw or len(raw) < frame_size:
+                break
 
-        ascii_row_cache: dict[tuple[int, int], list[Optional[Color]]] = {}
-        out_frame: list[list[Optional[Color]]] = []
-        for y in range(height):
-            row: list[Optional[Color]] = []
-            for x in range(width):
-                sx = int(x / width * iw)
-                sy = int(y / height * ih)
-                col = frame_data[sy][sx]
-                if color:
-                    row.append(col)
-                else:
-                    lum = col.luminance
-                    row.append(Color(lum, lum, lum))
-            out_frame.append(row)
+            frame_data: list[list[Color | None]] = []
+            for y in range(ih):
+                row: list[Color | None] = []
+                for x in range(iw):
+                    idx = (y * iw + x) * 3
+                    row.append(Color(raw[idx], raw[idx + 1], raw[idx + 2]))
+                frame_data.append(row)
 
-        v.frames.append(out_frame)
-        frame_count += 1
+            out_frame: list[list[Color | None]] = []
+            for y in range(height):
+                row: list[Color | None] = []
+                for x in range(width):
+                    sx = int(x / width * iw)
+                    sy = int(y / height * ih)
+                    col = frame_data[sy][sx]
+                    if color:
+                        row.append(col)
+                    else:
+                        lum = col.luminance
+                        row.append(Color(lum, lum, lum))
+                out_frame.append(row)
 
-        if on_progress and total_frames_expected > 0:
-            on_progress(frame_count / total_frames_expected)
+            v.frames.append(out_frame)
+            frame_count += 1
 
-        if max_frames > 0 and frame_count >= max_frames:
-            proc.terminate()
-            break
+            if on_progress and total_frames_expected > 0:
+                on_progress(min(1.0, frame_count / total_frames_expected))
 
-    proc.wait()
+            if max_frames > 0 and frame_count >= max_frames:
+                pipe.terminate()
+                break
+
+    if frame_count == 0:
+        raise FFmpegError(
+            f'ffmpeg produced no frames from {path} (it may be audio-only, '
+            'empty, or corrupt)')
     return v
 
 
-def video_to_player(path: str, width: int = 80, height: Optional[int] = None,
-                    fps: Optional[float] = None, max_frames: int = 0,
+def video_to_player(path: str, width: int = 80, height: int | None = None,
+                    fps: float | None = None, max_frames: int = 0,
                     loop: bool = True, invert: bool = False,
                     color: bool = True,
-                    on_progress: Optional[callable] = None) -> FramePlayer:
+                    on_progress: callable | None = None) -> FramePlayer:
     """Convert a video file directly to a FramePlayer (ready to play)."""
     v = video_to_ascii(path, width, height, fps, max_frames,
                        invert, color, on_progress)
@@ -234,9 +247,9 @@ class ScreenRecorder:
         self.count = 0
 
     def record_frame(self, canvas: Canvas):
-        data: list[list[Optional[Color]]] = []
+        data: list[list[Color | None]] = []
         for y in range(canvas.h):
-            row: list[Optional[Color]] = []
+            row: list[Color | None] = []
             for x in range(canvas.w):
                 cell = canvas.buffer[y][x]
                 row.append(cell.fg or Color(0, 0, 0))

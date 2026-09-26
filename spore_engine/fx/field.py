@@ -1,5 +1,6 @@
 from __future__ import annotations
-import math, random
+import math
+import random
 from ..core.canvas import Canvas
 from ..core.color import Color
 

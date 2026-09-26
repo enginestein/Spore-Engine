@@ -1,34 +1,62 @@
 from __future__ import annotations
-import sys, time, os, termios, math
-from typing import Callable, Optional
+import sys
+import time
+import math
 from ..core.canvas import Canvas, HiResCanvas
 from ..core.color import Color, Gradient, DIM
-from ..core.camera import Camera
 from ..core.input import Input, KeyState, KeyEvent, MouseEvent, ResizeEvent
+from ..core.term import (DEFAULT_TERM_SIZE, TerminalSession, monotonic,
+                         posix_terminal_available, terminal_size)
 from ..core.util import clamp
+from ..core.camera import Camera  # noqa: F401  (re-exported for the subpackage API)
 from ..fx.screenfx import ScreenFX
 from ..fx.transitions import Transition
 from .sprite import GameSprite
 
+__all__ = ['App']
 
-def _termsize():
-    try:
-        return os.get_terminal_size().columns, os.get_terminal_size().lines
-    except Exception:
-        return 100, 40
+
+def _default_assets():
+    """The process-wide default asset store, resolved lazily.
+
+    Imported inside the function so ``easy`` does not pull in the asset
+    machinery (and its caches) unless an app is actually constructed."""
+    from ..core.assets import default_store
+    return default_store
+
 
 
 class App:
-    def __init__(self, width=None, height=None, title="Spore App", fps=30, colors=True,
-                 mouse=False):
+    """A batteries-included game loop.
+
+        app = App(width=80, height=30, title='Hello')
+        app.bg(Color(10, 10, 40))
+        app.on_key('space', lambda a: a.stop())
+        app.run()
+
+    Lifecycle is handled for you: raw mode, the alternate screen, a hidden
+    cursor and optional mouse reporting are all entered on :meth:`run` and
+    restored in a ``finally``, so Ctrl-C or a crashing update still hands the
+    user back a working shell.
+
+    When stdin or stdout is not a terminal (a pipe, a test, a notebook),
+    :meth:`run` refuses to spin: there is no key to read and rendering into a
+    pipe would flood it. Call :meth:`run_headless` if you want frames anyway.
+    """
+
+    def __init__(self, width=None, height=None, title="Spore App", fps=30,
+                 colors=True, mouse=False, alt_screen=True,
+                 assets=None):
         if width is None or height is None:
-            tw, th = _termsize()
+            tw, th = terminal_size(DEFAULT_TERM_SIZE)
             width = width or tw
             height = height or th
         self.width = width
         self.height = height
         self.title = title
         self.fps = fps
+        if fps <= 0:
+            raise ValueError(f'fps must be positive, got {fps}')
         self.colors = colors
         self.canvas = Canvas(width, height)
         self.hr = HiResCanvas(width, height * 2)
@@ -40,6 +68,8 @@ class App:
         self._dt = 0.0
         self._running = False
         self._paused = False
+        self._frames = 0
+        self._max_frames = None
         self._tick_handlers = []
         self._key_handlers = {}
         self._any_key_handlers = []
@@ -49,8 +79,6 @@ class App:
         self._init_handlers = []
         self._widgets = []
         self._focused_widget = None
-        self._is_tty = sys.stdin.isatty() and sys.stdout.isatty()
-        self._old_term = None
         self._last_frame = 0.0
         self._bg_art = None
         self._bg_art_scroll_x = 0.0
@@ -61,6 +89,17 @@ class App:
         self._transition = None
         self._transition_t = 0.0
         self._prev_canvas = None
+        #: Injected asset store, or the process-wide default. Passing one keeps
+        #: a test or a second app from sharing caches with the first.
+        self.assets = assets if assets is not None else _default_assets()
+        self._alt_screen = alt_screen
+        self._mouse = mouse
+        self._session = None
+
+    @property
+    def interactive(self) -> bool:
+        """Whether this app can actually read keys from a real terminal."""
+        return posix_terminal_available()
 
     @property
     def w(self):
@@ -77,6 +116,11 @@ class App:
     @property
     def dt(self):
         return self._dt
+
+    @property
+    def frames(self) -> int:
+        """How many frames have been rendered by the last :meth:`run`."""
+        return self._frames
 
     @property
     def paused(self):
@@ -198,28 +242,79 @@ class App:
 
     # -- lifecycle ------------------------------------------------------
 
-    def run(self):
+    def run(self, max_frames: int | None = None):
+        """Run until :meth:`stop` is called, ``q`` is pressed, or Ctrl-C.
+
+        With a non-terminal stdin or stdout this raises ``RuntimeError``
+        instead of looping forever - see :meth:`run_headless`. ``max_frames``
+        bounds the loop, which is what the tests and demos use.
+        """
+        if not self.interactive:
+            raise RuntimeError(
+                'App.run() needs a real terminal on both stdin and stdout; '
+                'this process has a pipe or a redirected stream. Use '
+                'run_headless(max_frames=...) to render frames anyway.')
+
         for h in self._init_handlers:
             h(self)
+
         self._running = True
-        self._last_frame = time.time()
-        tty_change = False
-        if self._is_tty:
-            self._old_term = termios.tcgetattr(sys.stdin)
-            self._input.enter_raw()
-            tty_change = True
-            print('\033[?25l\033[2J', end='', flush=True)
+        self._max_frames = max_frames
+        self._last_frame = monotonic()
+        self._session = TerminalSession(
+            mouse=self._mouse, alt_screen=self._alt_screen,
+            raw=True, on_resize=self._on_resize_signal, stream=sys.stdout)
         try:
-            self._main_loop()
+            with self._session:
+                self._input.enter_raw()
+                self._main_loop()
         except KeyboardInterrupt:
             pass
         finally:
-            if tty_change:
+            # Belt and braces: the session already restores the terminal, but a
+            # failure inside __exit__ must not leave raw mode on.
+            try:
                 self._input.exit_raw()
-                print('\033[?25h\033[0m', end='', flush=True)
+            except Exception:
+                pass
+
+    def run_headless(self, max_frames: int = 1):
+        """Render ``max_frames`` frames with no terminal setup and no output.
+
+        Intended for tests and for driving an app from another program. Nothing
+        is written to stdout, so this is safe to call under a pipe."""
+        if max_frames < 0:
+            raise ValueError(f'max_frames must be non-negative, got {max_frames}')
+        for h in self._init_handlers:
+            h(self)
+        self._running = True
+        self._max_frames = max_frames
+        self._last_frame = monotonic()
+        try:
+            self._main_loop(echo=False)
+        finally:
+            self._running = False
+        return self._frames
 
     def stop(self):
         self._running = False
+
+    def _on_resize_signal(self, cols, lines):
+        """SIGWINCH handler: adopt the new size and tell subscribers."""
+        self._apply_resize(cols, lines)
+
+    def _apply_resize(self, cols, lines):
+        if cols <= 0 or lines <= 0:
+            return
+        if (cols, lines) == (self.width, self.height):
+            return
+        self.width = cols
+        self.height = lines
+        self.canvas.resize(cols, lines)
+        if self.hr is not None:
+            self.hr.resize(cols, lines * 2)
+        for h in self._resize_handlers:
+            h(self, cols, lines)
 
     # -- rendering ------------------------------------------------------
 
@@ -249,7 +344,7 @@ class App:
     def _sprite_pos(self, s: GameSprite):
         if self.camera is not None:
             return self.camera.to_screen(s.x, s.y)
-        return int(round(s.x)), int(round(s.y))
+        return round(s.x), round(s.y)
 
     def _draw_sprite(self, s: GameSprite, hires: bool = False):
         if not s._visible or s._opacity <= 0:
@@ -258,7 +353,7 @@ class App:
         target = self.hr if use_hr else self.canvas
         if use_hr:
             sx, sy = self.camera.to_screen(s.x, s.y) if self.camera is not None \
-                else (int(round(s.x)), int(round(s.y)))
+                else (round(s.x), round(s.y))
             ox, oy = sx * 2, sy * 2
         else:
             ox, oy = self._sprite_pos(s)
@@ -286,13 +381,19 @@ class App:
             else:
                 target.set_pixel(px, py, char, fg, bg, s._z)
 
-    def _main_loop(self):
+    def _main_loop(self, echo: bool = True):
         frame_time = 1.0 / self.fps
         while self._running:
-            now = time.time()
+            # Checked before rendering, not after: a while-loop would otherwise
+            # always produce one frame, so max_frames=0 would mean "one frame".
+            if self._max_frames is not None and self._frames >= self._max_frames:
+                break
+            now = monotonic()
             self._dt = now - self._last_frame
             self._last_frame = now
             if self._dt > 0.1:
+                # A long stall (breakpoint, swap, NTP step) must not teleport
+                # every animation; clamp to one frame so it looks like a hitch.
                 self._dt = frame_time
             if not self._paused:
                 self._t += self._dt
@@ -300,14 +401,14 @@ class App:
             self._handle_input()
             if not self._paused:
                 self._update(self._dt)
-            self._render()
-            elapsed = time.time() - now
-            sleep_time = frame_time - elapsed
+            self._render(echo=echo)
+            self._frames += 1
+            sleep_time = frame_time - (monotonic() - now)
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
     def _handle_input(self):
-        if not self._is_tty:
+        if not self.interactive:
             return
         events = self._input.events(0)
         if not events:
@@ -319,7 +420,9 @@ class App:
                     h(self, ev)
                 if ev.down and ev.key in self._key_handlers:
                     self._key_handlers[ev.key](self)
-                if ev.down and ev.key == 'q':
+                if ev.down and ev.key == 'q' and 'q' not in self._key_handlers:
+                    # Only a built-in quit if the app has not claimed 'q'
+                    # itself; a game that binds 'q' to something else keeps it.
                     self._running = False
             elif isinstance(ev, MouseEvent):
                 if ev.action == 'press' and ev.button == 0:
@@ -329,6 +432,7 @@ class App:
                     for h in self._wheel_handlers:
                         h(self, ev.scroll_dx, ev.scroll_dy)
             elif isinstance(ev, ResizeEvent):
+                self._apply_resize(ev.width, ev.height)
                 for h in self._resize_handlers:
                     h(self, ev.width, ev.height)
 
@@ -350,7 +454,7 @@ class App:
             self._draw_sprite(s)
         if self.hr is not None:
             self.hr.to_canvas(self.canvas)
-        if self._is_tty and self.title:
+        if self.interactive and self.title:
             self.canvas.draw_text(2, self.height - 1, f" {self.title} ", DIM, z=999)
         if self._transition is not None and self._prev_canvas is not None:
             self._transition_t += self._dt / self._transition_dur
@@ -361,6 +465,7 @@ class App:
                 self._prev_canvas = None
         self.screen_fx.apply(self.canvas, seed=int(self._t * 100))
 
-    def _render(self):
+    def _render(self, echo: bool = True):
         self._render_frame()
-        self.canvas.render_to(sys.stdout)
+        if echo:
+            self.canvas.render_to(sys.stdout)

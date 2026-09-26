@@ -6,12 +6,22 @@ Comprehensive guide to using the Spore Engine.
 
 ## Installation
 
-Clone the repo.
+Clone the repo and install **numpy**, the one hard requirement. The `sim/`,
+`gen/` and `fx/` layers are written against ndarrays, so there is no meaningful
+pure-Python fallback.
 
-**Optional dependencies for media features:**
 ```bash
-pip install Pillow              # Better image loading
-sudo apt install ffmpeg         # Video conversion (or brew install ffmpeg)
+pip install numpy                # required
+pip install -e .                 # or just run from the repo
+```
+
+Everything else is optional and degrades at import time rather than raising, so
+`import spore_engine` works on a bare interpreter with just numpy:
+
+```bash
+pip install numba scipy          # JIT / fast paths; pure-Python fallbacks exist
+pip install Pillow               # image loading (the `media` extra)
+sudo apt install ffmpeg          # video conversion (or brew install ffmpeg)
 ```
 
 ---
@@ -595,7 +605,116 @@ render_mesh_wireframe(canvas, mesh, view_mat, proj_mat)
 
 # Solid with lighting
 render_mesh_solid(hr_canvas, mesh, view_mat, proj_mat, light_dir=Vec3(0.5, -1, -0.5))
+
+# Replace the built-in Lambert term with your own shading
+render_mesh_solid(hr_canvas, mesh, view, proj,
+                  shade=lambda fi, n, vd, lights: my_shade(n, vd, lights))
 ```
+
+### Camera3D
+
+One camera convention for every 3D backend. The engine's four backends used to
+disagree about surface type, camera form, fov units and where depth lived;
+`Camera3D` settles all of it once per frame.
+
+```python
+from spore_engine import Camera3D, Vec3
+
+cam = Camera3D.look_at((0, 3, 10), (0, 0, 0), fov=55)   # fov in DEGREES
+cam.aspect_for(hr)          # aspect comes from the surface, not an argument
+cam.view                    # world -> view
+cam.projection              # rebuilt for whatever surface it draws into
+cam.eye, cam.target, cam.fov, cam.near, cam.far
+
+# Orbiting
+orbit = Camera3D.orbiting((0, 0, 0), radius=12, height=4, speed=0.2).at_time(t)
+
+# Orthographic, and recovering a camera from matrices another backend built
+flat = Camera3D((0, 0, 5), (0, 0, 0), ortho=True, ortho_height=4.0)
+recovered = Camera3D.from_matrices(view_mat, proj_mat)
+
+# JSON, for scene files
+data = cam.to_dict(); cam = Camera3D.from_dict(data)
+```
+
+Two rules that differ from the older backends, both deliberate:
+- **`fov` is degrees.** `fov_radians` is derived. `render_mesh_wireframe`/
+  `render_mesh_solid` take an explicit `Mat4`, so they never had an opinion.
+- **Aspect comes from the surface.** A terminal cell grid and a hi-res sub-cell
+  grid need different projections, and a camera built for one is wrong for the
+  other.
+
+### Retained 3D Scene
+
+Data in, data out, saveable as JSON. `Scene3D` holds objects; `render()` resolves
+the camera against whatever surface it is handed and emits one `DrawCall` per
+visible entity, so a backend never has to ask what aspect it is drawing for.
+
+```python
+from spore_engine import (Scene3D, Entity3D, Material, Light3D, Camera3D,
+                          HiResCanvas, Color, Vec3, Mesh3D)
+
+scene = Scene3D('room', ambient=Color(24, 28, 44), background=Color(6, 8, 18))
+scene.camera = Camera3D.look_at((0, 3, 10), (0, 0, 0), fov=55)
+
+# direction is the direction light TRAVELS, so this is a sun from above
+scene.add(Light3D.directional((0.4, -1, 0.3), color=Color(255, 240, 200),
+                              intensity=1.0, name='key'))
+scene.add(Light3D.point((2, 3, 4), radius=8.0, name='lantern'))
+
+floor = scene.add(Entity3D.box('floor', (0, -1, 0), (12, 0.4, 12),
+                               Material(Color(70, 80, 100)))).get('floor')
+scene.add(Entity3D.sphere('orb', (0, 1.4, 0), 1.6,
+                          material=Material(Color(80, 200, 255), specular=0.9)))
+
+# Entities compose like any Mat4
+orb = scene.require('orb')
+orb.translate(2, 0, 0)          # by a delta, in the parent's frame
+orb.move_to(0, 1.4, 0)          # to an absolute point, keeping its rotation
+orb.position()                  # -> Vec3
+orb.bounds(), orb.radius()      # world-space AABB and farthest vertex
+
+# Organisation
+scene.require('orb').visible = False
+scene.add(Entity3D.box('crate', tags=['props']))
+scene.with_tag('props')                     # tag lookup, inherited by children
+child = Entity3D('lid', Mesh3D.cube(1.0), tags=['props'])
+child.parent = scene.require('crate')       # a hidden parent hides its children
+
+# Draw, and inspect what was asked for
+calls = scene.render(HiResCanvas(80, 40))
+for call in calls:
+    call.entity.name, call.surface, call.view, call.projection, call.lights
+
+# Save / load
+scene.save('room.json')       # ~3 kB: primitives stored by name
+back = Scene3D.load('room.json')
+```
+
+**Backends.** Implement `Renderer.draw(call)`, or wrap a callback:
+
+```python
+from spore_engine import FuncRenderer, Renderer, MeshRenderer
+
+scene.renderers = [MeshRenderer()]                     # the engine rasteriser
+scene.renderers = [FuncRenderer(lambda call: blit(call), 'blit')]
+
+class MyBackend(Renderer):
+    name = 'mine'
+    def draw(self, call): ...
+```
+
+`MeshRenderer` applies the entity's world transform, then hands the mesh to
+`render_mesh_solid` with a shading callback. When handed a low-res `Canvas` it
+renders through a temporary `HiResCanvas` and folds back, because the rasteriser
+keeps a z per sub-cell.
+
+**Materials and lights.** `Material.shade(normal, view_dir, lights, at)` is a
+Blinn-Phong term; an unlit face falls back to the ambient floor rather than
+black. Pass `at`, the shaded point, so a point light attenuates by its real
+distance. The face-level rasteriser shades a whole face one colour, so it has no
+per-pixel position — a renderer that wants exact point lights should shade per
+vertex.
 
 ### Ray Tracing
 
@@ -925,6 +1044,153 @@ sim.step()
 sim.render(canvas)
 ```
 
+### Array Imaging (Image / Field)
+
+The layer to reach for when a frame is *continuous per-pixel work* rather than
+discrete objects. A `Field` is a scalar per cell; an `Image` is a float RGB
+image. `to_cells` is the single point where an image becomes characters, and it
+must happen **once, at the end**.
+
+```python
+import numpy as np
+from spore_engine import (Image, Field, StarField, CellCache, Color, Gradient,
+                          Canvas, HiResCanvas)
+
+c, hr = Canvas(80, 24), HiResCanvas(80, 48)
+W, HZ = 80, 24
+SKY = Gradient(Color(2, 3, 11), Color(4, 6, 21), Color(19, 32, 58))
+
+# --- generate -------------------------------------------------------------
+sky = Image.gradient('y', SKY, HZ, W)                       # a ramp, filled
+sky = sky.add(Field.radial(HZ, W, 54, 10, 4, power=1.4).tinted(Color(90, 255, 160)))
+sky = sky.add(StarField(300).draw(Image.zeros((HZ, W)), 2.0))
+
+# class helpers on Image: gradient / full / zeros / from_surface
+# class helpers on Field: fbm / fbm_line / plasma / radial / gauss / waves / full / zeros
+
+# --- mirror it, then tint the water ---------------------------------------
+mirror = np.clip(HZ - 1 - np.arange(W) * 0.35, 0, HZ - 1).astype(int)
+water = sky.sample_rows(mirror).absorb(Color(4, 12, 24), 0.35)
+frame = sky.stacked(water)                                  # sky above water
+
+# --- grade, all still in linear light --------------------------------------
+frame = (frame
+         .tonemapped(172.0)          # exponential highlight rolloff
+         .bloomed(205.0, 3, 0.2)     # two-radius additive glare
+         .vignetted(0.5, 2.2))       # darken toward the corners
+
+# --- one quantisation ------------------------------------------------------
+frame.to_cells(hr, z=0, cache=CellCache(hr.h, hr.w))
+hr.to_canvas(c)                         # the fold, once
+```
+
+`to_cells` requires the image to be **exactly** the surface's size — it does not
+scale or pad. So a `HiResCanvas(80, 48)` wants a `48 × 80` image, and a sky built
+at `24 × 80` has to be `stacked` with its reflection first. That is deliberate: a
+smaller image would silently leave the rest of the surface holding the previous
+frame, which is a worse failure than an error at the call.
+
+Remember the argument order: surfaces are `(w, h)`, images and fields are
+`(h, w)`.
+
+### Compositing and masks
+
+`add` is additive light and is how most things go in. A `Field` gains a channel
+axis, a colour becomes a broadcast view, and a 1-D array reads as one value per
+column.
+
+```python
+frame.add(other_field)                       # scalar field, as grey light
+frame.add(mask, gain=Color(0, 255, 120))     # field tinted by a colour
+frame.add(mask, gain=(0.55, 0.62, 1.0))      # or by an absolute float triple
+frame.over(sprite_image, alpha=mask)         # alpha composite
+frame.mix(tint, t)                           # lerp towards a colour by t
+frame.absorb(Color(4, 12, 24), 0.35)         # a medium: lerp by a per-pixel amount
+frame.scaled(gain_field)                     # multiply
+frame.placed(other, y, x)                    # composite at an offset, clipped
+frame.displaced(dx, dy)                      # per-pixel shift
+frame.stacked(below)                         # band-wise assembly
+frame.rows(0, 12)                            # a row slice
+```
+
+A per-row `(h, 1)` or per-column `(1, w)` gain or mask is **broadcast** across
+the frame, which is what numpy would do and almost always what you mean. Only a
+shape that genuinely cannot be broadcast is resized.
+
+```python
+per_row = np.linspace(0, 1, HZ, dtype=np.float32)[:, None]   # (HZ, 1)
+frame.add(per_row * 40, gain=Color(120, 160, 255))           # held across the width
+```
+
+### Fields
+
+```python
+f = Field(np.random.default_rng(0).random((HZ, W)).astype(np.float32))
+
+f.threshold(0.7)            # a ramp from 0 at 0.7 to 1 at 1.0; instant if hi omitted
+f.clip(0, 1)                # clamp
+f.sqrt()                    # elementwise
+f.abs()                     # elementwise
+f.smoothstep(0.2, 0.8)      # a soft ramp between two edges
+f.dilate(2, 'max')          # the bloom halo, without scipy
+f.blurred(1)                # separable box blur
+f.shifted(dx, dy)           # translate
+f.resized(h, w)             # resample
+f.tinted(Color(90, 255, 160))   # this field's shape, in one colour -> an Image
+Field(pc).palette(_AURORA)      # map through a Gradient -> an Image
+```
+
+Gradients are sampled once and cached against the `Gradient`, so calling
+`palette()` per layer per frame costs a gather, not 256 ramp evaluations.
+
+### Post ops
+
+All of these treat the whole frame, and all of them run **before** the fold so
+both halves of a cell are treated the same.
+
+```python
+frame.tonemapped(knee=172.0)      # exponential rolloff above the knee
+frame.bloomed(205.0, 2, 0.5)      # threshold, two dilation radii, squared
+frame.vignetted(0.5, 2.2)         # darken toward the corners
+frame.blurred(1)                  # separable box blur
+frame.kuwahara(2)                 # painterly, 4-quadrant variance
+frame.posterized(5)               # N levels
+frame.scanlined(0.3)              # darken every other row
+frame.pixelated(3)                # block-average down
+frame.chromatic(1)                # split the channels sideways
+frame.edged(0.35)                 # outline from the gradient
+```
+
+### CellCache
+
+A frame allocates one `Color` per sub-cell, and `Color` is immutable, so the
+previous object can be reused wherever the 8-bit value has not moved. Roughly
+four fifths of a frame qualifies, and allocating fresh instead churns ~20k
+objects a frame — enough to drive a full cyclic-GC pass every few frames, which
+measured as more expensive than the entire rest of the render.
+
+```python
+cache = st.get('cache', None, lambda: None)
+if cache is None or not cache.matches(hr.h, hr.w):
+    cache = CellCache(hr.h, hr.w)     # rebuilds itself on a resize
+    st.cache = cache
+
+frame.to_cells(hr, z=0, cache=cache)
+```
+
+### StarField
+
+```python
+stars = st.get('stars', None, lambda: StarField(260, seed=0x57A, warm=0.12))
+stars.draw(image, t)                            # into an Image
+stars.draw_cells(hr, t, z=3, gain=150.0)        # onto a finished frame
+```
+
+Positions are 0-1 *fractions*, so a terminal resize rescales the field instead
+of indexing off the end of a list sized for the first frame. Use `draw_cells` for
+stars that must land on top of a graded frame — a `kuwahara` window will flatten
+a one-sub-cell star into the background.
+
 ### Post-Processing Effects
 
 ```python
@@ -941,6 +1207,17 @@ scanlines(canvas, intensity=0.3)
 vignette(canvas, intensity=0.5)
 palette_remap(canvas, gradient)
 ```
+
+These read and write **`Cell.fg` only**. On a folded half-block surface `fg` is
+the *top* sub-cell, so each one lights the top half of every cell and leaves the
+bottom half untouched. That is fine for a grid of glyphs and wrong for a
+continuous image.
+
+**Rule of thumb:** if the frame is continuous per-pixel work, build it as an
+`Image` and grade it *before* the fold — see
+[Array Imaging](#array-imaging-image--field) below. If it is discrete objects
+(sprites, text, particles, widgets), these filters and per-cell drawing are the
+right tools.
 
 ### Screen Effects
 

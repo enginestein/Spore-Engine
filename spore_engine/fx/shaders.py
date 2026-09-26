@@ -1,11 +1,9 @@
 from __future__ import annotations
-import math, random
-from typing import Optional, Callable
+import math
+import random
 from ..core.canvas import Canvas, Cell
-from ..core.color import Color, BLACK, WHITE
-
-
-SHADE_CHARS = ' .:-=+*#%@'
+from ..core.glyphs import SHADE_CHARS
+from ..core.color import Color
 
 
 class Shader:
@@ -27,7 +25,7 @@ class ShaderPipeline:
     def remove(self, name: str):
         self.shaders = [s for s in self.shaders if s.name != name]
 
-    def get(self, name: str) -> Optional[Shader]:
+    def get(self, name: str) -> Shader | None:
         for s in self.shaders:
             if s.name == name:
                 return s
@@ -340,12 +338,12 @@ class Crystallize(Shader):
             for x in range(w):
                 best_d = float('inf')
                 best_color = None
-                for (gx, gy), (px, py) in points.items():
+                for px, py in points.values():
                     d = math.hypot(x - px, y - py)
                     if d < best_d:
                         best_d = d
-                        sx = int(round(px))
-                        sy = int(round(py))
+                        sx = round(px)
+                        sy = round(py)
                         if 0 <= sx < w and 0 <= sy < h:
                             cell = canvas.buffer[sy][sx]
                             if cell.fg:
@@ -485,8 +483,11 @@ class VHSGlitch(Shader):
                         if c.fg:
                             c.fg = Color(255 - c.fg.r, c.fg.g, c.fg.b)
             if random.random() < self.intensity * 0.5:
-                row_start = random.randint(0, w - 10)
-                row_len = random.randint(5, 15)
+                # Clamp to the canvas: randint(0, w - 10) raises once the
+                # terminal is narrower than the tear it is trying to place.
+                tear = min(10, w)
+                row_start = random.randint(0, w - tear)
+                row_len = random.randint(1, min(15, tear))
                 for x in range(row_start, min(w, row_start + row_len)):
                     canvas.buffer[y][x].fg = Color(
                         random.randint(100, 255),

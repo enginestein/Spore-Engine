@@ -2,7 +2,7 @@
 
 import io
 
-from spore_engine import Scene, Color, Gradient
+from spore_engine import Scene, Color
 
 
 def test_scene_forwards_draw_to_canvas():

@@ -110,6 +110,7 @@ from .scene_eclipse import scene_eclipse
 from .scene_neon_city import scene_neon_city
 from .scene_geometric_flower import scene_geometric_flower
 from .scene_sierpinski import scene_sierpinski
+from .scene_aurora_lagoon import scene_aurora_lagoon
 
 
 SCENES = [
@@ -251,4 +252,6 @@ SCENES = [
     ("Neon City", scene_neon_city),
     ("Geometric Flower", scene_geometric_flower),
     ("Sierpinski", scene_sierpinski),
+    # --------------- Flagship ---------------
+    ("Aurora Lagoon", scene_aurora_lagoon),
 ]

@@ -9,9 +9,11 @@ This document explains how every source file contributes to the Spore Engine.
 ```
 spore_engine/
 ├── __init__.py          # Public API — re-exports everything
+├── __version__.py       # __version__ / __version_info__ (test_api asserts these
+│                        #   stay in sync with pyproject.toml)
 ├── core/                # Core rendering primitives
-├── fx/                  # Visual effects
-├── render3d/            # 3D rendering pipeline
+├── fx/                  # Visual effects (incl. the array image pipeline)
+├── render3d/            # 3D rendering pipeline, Camera3D, retained Scene3D
 ├── sim/                 # Simulations (physics, fluids, CA, noise)
 ├── gen/                 # Procedural generation
 ├── ui/                  # Terminal UI toolkit
@@ -27,21 +29,45 @@ spore_engine/
 ### `__init__.py`
 Re-exports all core types for convenient `from spore_engine import Canvas, Color, ...`, plus the scene-authoring layer (`SceneState`, `Scene`, `Layer`, `Camera`, `Input`, `KeyState`), the math utils (`clamp`, `lerp`, `ramp`, `wave`, `osc`, ...), the asset store (`Assets`, `assets`, `load_sprite`/`load_palette`/`load_model`/`load_text`), and the ECS (`World`, `System`, `Component`, `EcsEntity`, `Transform`, `SpriteComponent`, `SpriteRenderSystem`).
 
+### `_accel.py`
+Optional **numba** acceleration with a pure-Python fallback. `sim.noise` and
+`sim.fluid` JIT-compile their inner loops; the compiled and uncompiled paths are
+numerically identical, so numba is purely a speed knob. When numba is absent a
+decorator returns the function unchanged. Importing this module must never fail.
+
+### `_optional.py`
+Lazy access to **Pillow**, which lives in the `media` extra. Modules that need it
+import it inside the function that uses it, so `import spore_engine` works without
+it — but a bare `ModuleNotFoundError: No module named 'PIL'` deep inside a render
+loop is a bad way to learn the wrong extra is missing. `pillow()` raises a message
+that names the extra instead.
+
+### `glyphs.py`
+The engine's glyph tables: shade ramps, line-drawing characters, block glyphs.
+Plain data with no dependencies, so `canvas.py` and `draw.py` can both import it
+without an import cycle. Previously the same ramp string was hardcoded in
+fourteen files.
+
 ### `color.py`
 **`Color`** — Immutable RGB dataclass with ANSI truecolor escape generation, HSV/hex conversion, luminance, lerp, blend, mul, and ANSI 256 approximation.
 **`Gradient`** — Multi-stop color gradient evaluable at any `t ∈ [0, 1]`. Supports 7 named palettes (fire, ice, neon, ocean, forest, sunset, grayscale).
 **`PALETTES`** — 7 predefined color ramps (11 stops each).
+**`fast_color(r, g, b)`** — a `Color` from three already-clipped 0-255 ints, skipping the validating constructor. For per-cell and per-particle inner loops, where the constructor's microsecond is the largest single line item in a frame. The caller clips; the validation would only repeat work already done.
 **Role:** All visible output passes through Color for ANSI formatting.
 
 ### `geom.py`
 **`Vec2`** — 2D vector with addition, subtraction, scalar multiply, dot, cross (scalar), length, normalize, distance.
 **`Vec3`** — 3D vector with same ops plus 3D cross product.
-**`Mat4`** — 4×4 homogeneous transformation matrix with multiply, transform (with perspective divide), identity, translate, scale, rotate_x/y/z, perspective (frustum projection), look_at (UVN camera).
+**`Mat4`** — 4×4 homogeneous transformation matrix with multiply, identity, translate, scale, rotate_x/y/z, perspective (frustum projection), orthographic, and look_at (UVN camera).
+- `transform(v)` divides through by `w` — right for a screen position, but it discards information a renderer needs.
+- `transform4(v)` returns `(x, y, z, w)` undivided, for a raytracer generating primary rays (each pixel is a different point on the image plane, so it must divide by its own w) and for a rasterizer interpolating `z/w` and `1/w` separately.
+- `transform_vector(v)` transforms a *direction*: the translation column is skipped, which `transform` cannot do.
+- `normal_matrix()` is the inverse-transpose of the upper 3×3, needed once a model is non-uniformly scaled — the transform itself would tilt its normals.
 **Role:** Foundation for all spatial math — 2D physics, 3D rendering, camera systems.
 
 ### `canvas.py`
-**`Cell`** — A single terminal cell: char, fg Color, bg Color, z-depth.
-**`Canvas`** — The primary framebuffer (`w × h` Cell grid). Cells start at `z = -inf`; `clear()` resets to `z = -inf`. All drawing lives in `DrawMixin` (see `draw.py`, inherited by both surfaces); `canvas.py` contributes `set_pixel`/`get_pixel` (z-depth occlusion test), `set_pixel_f` (fractional-coordinate pixel), `half_block`/`half_block_pixel` (Unicode half-block primitives), `render_to` (incremental ANSI output, below), and `copy` (deep copy).
+**`Cell`** — A single terminal cell: char, fg Color, bg Color, z (painter's-order layer) and depth (geometric distance). `depth` starts at `+inf`, lower wins, and it is deliberately excluded from `__eq__` so a depth-only change does not count as a dirty cell for the incremental flush.
+**`Canvas`** — The primary framebuffer (`w × h` Cell grid). Cells start at `z = -inf`; `clear()` resets to `z = -inf`. All drawing lives in `DrawMixin` (see `draw.py`, inherited by both surfaces); `canvas.py` contributes `set_pixel`/`get_pixel` (z-depth occlusion test), `set_pixel_depth` (the same test against `Cell.depth`, which is what a renderer with real perspective wants), `set_pixel_f` (fractional-coordinate pixel), `half_block`/`half_block_pixel` (Unicode half-block primitives), `render_to` (incremental ANSI output, below), and `copy` (deep copy).
 
 Output is dirty-cell: `render_to(stream, clear_first=True, force_full=False)` diffs the buffer against the previous rendered frame and rewrites only the cells that changed, grouped into contiguous runs with one cursor move (`\033[<row>;<col>H`) each and minimal color transitions. Background colour is part of the diff key, so a pure background-color change is caught too. `clear()` does not throw the diff away — the usual clear-and-repaint loop (as in `easy.App`) stays incremental, and a frame identical to the last one emits nothing. `force_full=True`, or `full_redraw()`, forces a complete rewrite (after a resize or a terminal desync). `render_stats` reports how many cells/rows/bytes the last render emitted and whether it was a full redraw.
 **`HiResCanvas`** — Double-resolution canvas (`w × 2h` buffer). `to_canvas(canvas, z=0, blank=False)` maps vertical pixel pairs to half-block chars (▀ ▄ █); it *skips empty cells by default* so a pre-drawn background survives, `blank=True` also erases empties.
@@ -141,6 +167,45 @@ Every primitive takes a trailing `z=` depth (default 0). Lazy `_shade_chars()` h
 **`render_shadows()`** — DDA-based shadow cone rendering.
 **Role:** 2D lighting system for game-like scenes.
 
+### `imgops.py`
+The whole-image pipeline: a `Field` is a scalar field, an `Image` is a float RGB
+image, and `to_cells` is the single point where an image becomes characters.
+
+**`Image`** — `add`, `over`, `mix`, `absorb`, `scaled`, `placed`, `stacked`,
+`displaced`, `resized`, `rows`, `sample_rows`, `luma`, and the grades
+`tonemapped`, `bloomed`, `vignetted`, `blurred`, `kuwahara`, `posterized`,
+`scanlined`, `pixelated`, `chromatic`, `edged`, `scattered`. Class helpers:
+`gradient(axis, stops, h, w)`, `full`, `zeros`, `from_surface`.
+
+**`Field`** — one scalar per cell, for masks and scalar fields: `abs`, `sqrt`,
+`clip`, `threshold(lo, hi)`, `smoothstep`, `dilate(radius, op)`, `blurred`,
+`shifted`, `resized`, `tinted(color, gain)`, `palette(gradient)`. Class
+helpers: `fbm`, `fbm_line`, `plasma`, `radial`, `gauss`, `waves`, `full`,
+`zeros`.
+
+**`StarField`** — a retained twinkling star field. Positions are 0-1 *fractions*,
+so a terminal resize rescales the field instead of indexing off the end of a list
+sized for the first frame. `draw(image, t)` adds it to an `Image`;
+`draw_cells(surface, t)` stamps it straight into a surface for effects that must
+land on top of a finished frame. Replaces three divergent hand-rolled copies.
+
+**`CellCache`** — reuses immutable `Color` objects across frames, rebuilding
+only the sub-cells whose 8-bit value moved. Roughly four fifths of a frame
+carries the value it carried last frame, so this removes most of the GC
+pressure of a per-cell Python loop.
+
+Two conventions worth knowing:
+- **Broadcast, don't stretch.** A per-row `(h, 1)` or per-column `(1, w)` gain
+  or mask is broadcast across the frame. Only a shape that genuinely cannot be
+  broadcast is resized.
+- **Grade before the fold.** `to_cells` needs the image to *fit* the surface,
+  and the half-block fold should happen once, at the end. Running cell-level
+  filters after the fold is why 8 of the 9 filters in `postfx.py` only light the
+  top sub-cell of every cell.
+
+**Role:** The layer to reach for whenever a frame is continuous per-pixel work
+rather than discrete objects. See `demos/scene_aurora_lagoon.py`.
+
 ### `postfx.py`
 9 post-processing effects applied to Canvas after scene rendering:
 - **box_blur** — Average neighbors within radius (low-pass filter)
@@ -152,6 +217,12 @@ Every primitive takes a trailing `z=` depth (default 0). Lazy `_shade_chars()` h
 - **chromatic_aberration** — Split RGB channels horizontally
 - **pixelate** — Block-average nearest-neighbor
 - **palette_remap** — Map luminance through a gradient
+
+These read and write `Cell.fg` only. On a folded half-block surface that is the
+*top* sub-cell, so each one affects half the image — which is why
+`fx/imgops.py` exists and why whole-frame grading should happen before
+`to_cells`.
+
 **Role:** Polish and stylize rendered output.
 
 ### `screenfx.py`
@@ -191,8 +262,67 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 - Back-face culling via normal·view_direction.
 - Lambertian diffuse lighting.
 **`render_mesh_wireframe()`** — Project vertices, draw edges with depth-based shading.
-**`render_mesh_solid()`** — Project faces, scanline fill with per-pixel z-buffer depth testing (handles intersecting meshes).
+**`render_mesh_solid()`** — Project faces, scanline fill with per-pixel z-buffer depth testing (handles intersecting meshes). Takes optional `shade=` and `lights=` hooks: `shade` is called as `shade(face_index, normal, view_dir, lights)` and replaces the built-in Lambert term, which is how `Scene3D`'s materials and light list reach the rasteriser. Requires a `HiResCanvas` — it keeps a z per sub-cell — so `MeshRenderer` renders through a temporary one and folds back for a low-res `Canvas`.
 **Role:** All 3D polygonal rendering.
+
+### `camera3d.py`
+**`Camera3D`** — one camera convention for every 3D backend. The engine's four
+backends had disagreed about surface type, camera form, fov units and where
+depth lived; this settles all of it once per frame.
+
+- `fov` is in **degrees** everywhere; `fov_radians` is derived.
+- Aspect comes from the **surface** (`aspect_for(surface)`), not a separate
+  argument, so a camera cannot disagree with the buffer it draws into.
+- Perspective and orthographic (`ortho`, `ortho_height`), with `near`/`far`
+  validated as `0 < near < far`.
+- `look_at(eye, target)`, `orbiting(target, radius, ...)`, `basis()`,
+  `view_forward()`, `eye_and_target()`.
+- `from_matrices(view, projection)` recovers eye/target/up — the direction the
+  other backends actually wanted.
+- `to_dict()`/`from_dict()` for scene files. A file saying `ortho` without a
+  height still loads: one is derived that frames the target.
+
+**Role:** The camera every 3D backend should be handed.
+
+### `scene3d.py`
+A **retained** scene: data in, data out, saveable.
+
+**`Scene3D`** — holds `Entity3D` and `Light3D` objects. `render(surface)`
+resolves the camera against the surface it was handed (a terminal cell grid and
+a hi-res sub-cell grid need different projections), builds one `DrawCall` per
+visible entity, and runs them through its renderers in order. A hidden parent
+takes its children with it, and tags are inherited.
+
+**`Entity3D`** — geometry, a full `Mat4` transform, a `Material`, a name,
+visibility and tags. Primitives via `box`/`sphere`/`torus`/`icosphere`/`pyramid`
+or `from_mesh`; `translate`/`move_to`/`world_transform`/`normal_matrix`/
+`bounds`/`radius`; `to_dict`/`from_dict`.
+
+**`Material`** — colour, ambient, specular, shininess, emissive; `shade(normal,
+view_dir, lights, at)` is a Blinn-Phong term where an unlit face falls back to
+the ambient floor rather than black. Pass `at`, the shaded point, so a point
+light attenuates by its real distance.
+
+**`Light3D`** — directional or point. `direction` is the direction light
+*travels*, so the default `(0, -1, 0)` is a sun shining down onto up-facing
+surfaces; `contribution()` returns the negation, which is the vector Lambert and
+Blinn-Phong actually want.
+
+**`DrawCall`** — the common currency between a scene and a backend: entity,
+surface, view, projection, light list, material. A backend never has to ask what
+aspect it is drawing for or whether a light list is a list.
+
+**`Renderer`** — the backend interface; subclasses implement `draw(call)`.
+`MeshRenderer` feeds the engine rasteriser, rendering through a temporary
+`HiResCanvas` and folding back when handed a low-res `Canvas`. `FuncRenderer`
+wraps a callback, which is the seam for tests and custom passes.
+
+Serialisation is human-readable JSON. Primitives are recorded by name and their
+parameters, so a five-entity scene is ~3 kB rather than the ~60 kB of inlined
+vertex triples; an arbitrary mesh still round-trips through an explicit vertex
+fallback.
+
+**Role:** The layer between "a demo function that draws" and "a scene file".
 
 ### `isometric.py`
 **`IsoTile`** — Diamond-shaped isometric tile with shaded faces (3D depth cue).
@@ -227,6 +357,20 @@ Scene transition effects: `Fade`, `Wipe` (4 dirs), `Slide` (4 dirs), `Checkerboa
 **`load_obj()`** — Parse Wavefront OBJ files (vertices, faces, normals) into a `Mesh3D` with automatic edge computation.
 **`load_ply()`** — Parse Stanford PLY files (ASCII format, vertices + faces) into a `Mesh3D` with color and edge computation.
 **Role:** Import external 3D models from standard file formats.
+
+---
+
+### `_pillow_compat.py`
+Pillow version shims. Pillow has been removing pixel-access APIs —
+`Image.getdata()` is deprecated in favour of `get_flattened_data()`, and
+`Image.__iter__` was dropped in Pillow 12 — and the `media` extra accepts
+`pillow>=9.0.0`. These helpers feature-detect at the call site so no caller has
+to care which Pillow it got.
+
+### `img3d.py`
+Turns a 2D image into a 3D heightfield mesh (`Mesh3D`) and renders it as ASCII
+with `render_mesh_solid`, so a photograph can be given real relief and lighting
+rather than only a brightness ramp.
 
 ---
 

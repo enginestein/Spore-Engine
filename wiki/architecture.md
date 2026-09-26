@@ -43,10 +43,31 @@ Scene functions use Canvas/HiResCanvas methods:
 - Each method writes to a `Cell` in the buffer with z-depth occlusion
 - Cells store: `char`, `fg` (Color), `bg` (Color), `z`
 
-### 3. Post-Processing (optional)
+### 3. Array Imaging Path (continuous per-pixel work)
+```
+Field / Image (float, h × w × 3)      fx/imgops.py
+  → generate: gradient, fbm, plasma, radial, waves, gauss
+  → composite: add, over, mix, absorb, scaled, stacked, placed
+  → grade (still linear): tonemapped, bloomed, vignetted, kuwahara, ...
+  → to_cells(surface, cache=CellCache)      ← the single quantisation point
+  → HiResCanvas sub-cells
+  → hr.to_canvas(c)                         ← the single fold
+  → canvas.render_to(sys.stdout)
+```
+The point of the split is that grading belongs in linear light, before quantisation
+and before the fold. Both migrated scenes (`scene_aurora_lagoon.py`,
+`scene_starry_night.py`) use this path; see `demos/scene_aurora_lagoon.py` for a
+worked example with a mirrored reflection and a bloom.
+
+### 4. Post-Processing (optional)
 Effects from `postfx.py` and `shaders.py` can transform the canvas after the scene renders — blur, glow, edge detect, dither, palette remap, etc.
 
-### 4. Output
+These read and write `Cell.fg` only. On a folded half-block surface `fg` is the
+*top* sub-cell, so each one affects the top half of every cell. For a frame that
+is continuous per-pixel work, take the array path instead (see above): build an
+`Image`, grade it whole, quantise once, fold once.
+
+### 5. Output
 `canvas.render_to(sys.stdout)` writes ANSI escape sequences:
 - `\033[H` — Move cursor home (first frame or `clear_first=True`)
 - `\033[<row>;<col>H` — Jump to the start of a changed run
@@ -64,7 +85,7 @@ repaint loop does not resend a static background. `force_full=True` or
 
 For HiResCanvas: `to_canvas()` first flattens the double-resolution buffer to a Canvas using Unicode half-block characters (▀ ▄ █), then renders normally.
 
-### 5. Easy API (App/GameSprite)
+### 6. Easy API (App/GameSprite)
 
 The `App` class provides a higher-level rendering pipeline for sprite-based applications:
 
@@ -112,6 +133,30 @@ Mesh3D (vertices + faces)
   → Scanline fill with Lambertian lighting
   → Canvas pixels
 ```
+
+### Retained Scene Data Flow
+```
+Scene3D  (Entity3D + Light3D + Material, and one Camera3D)
+  → render(surface)
+      → camera rebuilt for THIS surface (aspect from the surface)
+      → one DrawCall per visible entity (hidden parents take their children)
+      → each Renderer.draw(call)
+          → MeshRenderer: world-transform the mesh, then
+            render_mesh_solid(surface, mesh, view, proj, shade=material.shade)
+              → a low-res Canvas is drawn through a temporary HiResCanvas
+                and folded back, because the rasteriser keeps a z per sub-cell
+  → list[DrawCall] returned, so a caller can inspect what was asked for
+```
+
+`DrawCall` is the contract between the scene and a backend: entity, surface,
+view, projection, light list, material. A backend never asks what aspect it is
+drawing for, nor whether a light list is a list — the four older 3D backends
+(`engine3d`, `isometric`, `raytracer`, `voxel`) each used to answer those
+differently, which is what `Camera3D` and `Scene3D` exist to settle.
+
+Scenes are data, so `to_dict`/`from_dict`/`save`/`load` make them files. Primitives
+are recorded by name and parameters; an arbitrary mesh falls back to explicit
+vertices.
 
 ### Physics Simulation Data Flow
 ```
@@ -399,8 +444,16 @@ For downlevel terminals: `.to_ansi_256()` approximates to xterm 256-color palett
 
 ## Key Design Decisions
 
-1. **No external dependencies** — Everything is pure Python. Optional ffmpeg/PIL for media I/O.
-2. **Z-buffer** — Each cell stores depth; `render_mesh_solid` interpolates depth per pixel so occlusion survives intersecting meshes.
+1. **numpy is the only hard dependency** — The `sim/`, `gen/` and `fx/` layers are
+   written against ndarrays, so there is no meaningful pure-Python fallback.
+   Everything else is optional and degrades at import time rather than raising:
+   numba and scipy (JIT/fast paths with pure-Python fallbacks), Pillow and ffmpeg
+   (media I/O). `import spore_engine` works on a bare interpreter with just numpy.
+2. **Z-buffer** — Each cell stores a painter's-order `z` and, separately, a
+   geometric `depth`; `render_mesh_solid` interpolates depth per pixel so
+   occlusion survives intersecting meshes. Keeping the two apart lets a graded
+   rewrite land above a mesh (`z = 2`) while a real perspective buffer still
+   sorts by distance.
 3. **Deep-empty z baseline** — New/cleared `Canvas` and `HiResCanvas` cells have `z = -inf`, so negative-z background fills paint after `clear()` and any `z >= 0` foreground occludes them.
 4. **Shared DrawMixin** — Every draw primitive lives once in `core/draw.py` and is inherited by both `Canvas` and `HiResCanvas`, so the two surfaces never drift apart.
 5. **Non-destructive hi-res flatten** — `HiResCanvas.to_canvas()` skips empty cells by default, so it never erases a pre-drawn background; pass `blank=True` to also clear empties.
@@ -410,6 +463,17 @@ For downlevel terminals: `.to_ansi_256()` approximates to xterm 256-color palett
 9. **Incremental output** — `render_to()` diffs each frame against the previous one and rewrites only changed cells with batched cursor moves; `clear()` keeps the diff so a steady frame emits nothing. `force_full`/`full_redraw()` escape hatch after a desync.
 10. **Raw terminal mode** — `demo.py` and `easy.App.run()` use raw mode for real-time keyboard input without the Enter key; `core/input.py` decodes escape sequences (arrows, F-keys, Home/End, PgUp/PgDn, etc.).
 11. **One asset door** — `core/assets.py` loads sprites/palettes/models/text through a single memoized store, and the ECS (`core/ecs.py`) keeps game state in plain components while drawing through the same Scene/Layer compositor everything else uses.
+12. **One quantisation point** — `Image.to_cells` is the only place an image
+    becomes characters, and the half-block fold happens once, at the end. Cell-level
+    filters (`postfx`) read only `Cell.fg`, which on a folded surface is the *top*
+    sub-cell — so whole-frame grading belongs before the fold, in linear light.
+13. **One camera convention** — `Camera3D` (degrees for fov, aspect from the
+    surface) and `Scene3D`'s `DrawCall` replace four backends that each answered
+    "what aspect am I drawing for?" differently. A backend receives a fully
+    specified call and never has to ask.
+14. **Scenes are data** — `Scene3D.to_dict`/`save` makes a scene a file.
+    Primitives are stored by name and parameters, so a scene file stays readable
+    and small; an arbitrary mesh falls back to explicit vertices.
 
 
 ---
@@ -422,8 +486,9 @@ core/        ← No internal dependencies (foundation layer); canvas.py, draw.py
                for authoring
 sim/         → core/ (uses Vec2/Vec3, Color, Canvas)
 gen/         → core/ + sim/ (uses noise, physics)
-render3d/    → core/ (uses Mat4, Vec3, Canvas)
+render3d/    → core/ (uses Mat4, Vec3, Canvas); scene3d → camera3d
 fx/          → core/ (uses Color, Canvas, Vec2, core.util.clamp)
+               imgops → sim/noise (PerlinNoise for fbm/fbm_line)
 anim/        → core/ (uses Color, core.util lerp/lerp_color, easing math)
 ui/          → core/ (uses Canvas, Color)
 easy/        → core/ (App uses core.input + core.camera + ScreenFX) + anim/

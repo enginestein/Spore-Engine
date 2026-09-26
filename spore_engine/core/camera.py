@@ -1,7 +1,5 @@
 from __future__ import annotations
-import math
-from typing import Optional
-from .canvas import Canvas, Cell
+from .canvas import Canvas
 
 
 class Camera:
@@ -12,8 +10,8 @@ class Camera:
     """
 
     def __init__(self, w: int, h: int, x: float = 0.0, y: float = 0.0,
-                 zoom: float = 1.0, world_w: Optional[int] = None,
-                 world_h: Optional[int] = None):
+                 zoom: float = 1.0, world_w: int | None = None,
+                 world_h: int | None = None):
         self.w = w
         self.h = h
         self.x = x
@@ -23,8 +21,8 @@ class Camera:
         self.world_h = world_h
 
     def to_screen(self, wx: float, wy: float) -> tuple[int, int]:
-        sx = int(round((wx - self.x) * self.zoom + self.w / 2))
-        sy = int(round((wy - self.y) * self.zoom + self.h / 2))
+        sx = round((wx - self.x) * self.zoom + self.w / 2)
+        sy = round((wy - self.y) * self.zoom + self.h / 2)
         return sx, sy
 
     def to_world(self, sx: float, sy: float) -> tuple[float, float]:
@@ -51,8 +49,8 @@ class Camera:
         return (self.left - margin <= wx <= self.right + margin
                 and self.top - margin <= wy <= self.bottom + margin)
 
-    def follow(self, wx: float, wy: float, dt: Optional[float] = None,
-               rate: float = None):
+    def follow(self, wx: float, wy: float, dt: float | None = None,
+               rate: float | None = None):
         if dt is not None:
             r = min(1.0, rate if rate is not None else 8.0 * dt)
             self.x += (wx - self.x) * r

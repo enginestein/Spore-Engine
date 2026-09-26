@@ -1,6 +1,5 @@
 from __future__ import annotations
 import re
-from typing import Optional
 from ..core.canvas import Canvas
 from ..core.color import Color
 
@@ -38,12 +37,17 @@ def _nearest_ansi256(c: Color) -> int:
 
 
 def parse_ansi(text: str) -> Canvas:
+    # A trailing newline terminates the last row rather than starting a new
+    # one; keeping it invented a blank final row, so a 5x2 canvas round-tripped
+    # through export_ansi came back as 5x3.
     lines = text.split('\n')
+    if lines and lines[-1] == '':
+        lines.pop()
     h = len(lines)
     w = max(len(re.sub(r'\033\[[0-9;]*[mHKJ]', '', l)) for l in lines) if lines else 80
     c = Canvas(max(w, 1), max(h, 1))
-    current_fg: Optional[Color] = None
-    current_bg: Optional[Color] = None
+    current_fg: Color | None = None
+    current_bg: Color | None = None
 
     for y, line in enumerate(lines):
         x = 0
@@ -94,25 +98,34 @@ def parse_ansi(text: str) -> Canvas:
 
 
 def export_ansi(canvas: Canvas) -> str:
+    """Serialise a canvas to ANSI text, losslessly.
+
+    Emits 24-bit SGR (``38;2;r;g;b``) rather than quantising to the 256-colour
+    cube, so :func:`parse_ansi` reads back exactly the colours that went in --
+    which is the whole point of save_ansi_file/load_ansi_file.
+
+    Sequences are built as ``\\033[0`` plus ``;``-joined parameters: prefixing
+    with the string ``'\\033[0;'`` and joining would emit a stray empty field
+    (``\\033[0;;38;2;...``), which no SGR parser matches, so the colour was
+    silently dropped on reload.
+    """
     lines = []
     for y in range(canvas.h):
         line = ''
-        last_fg: Optional[Color] = None
-        last_bg: Optional[Color] = None
+        last_fg: Color | None = None
+        last_bg: Color | None = None
         for x in range(canvas.w):
             cell = canvas.buffer[y][x]
             if cell.fg != last_fg or cell.bg != last_bg:
                 if not cell.fg and not cell.bg:
                     line += '\033[0m'
                 else:
-                    parts = ['\033[0;']
+                    params = ['0']
                     if cell.fg:
-                        idx = _nearest_ansi256(cell.fg)
-                        parts.append(f'38;5;{idx}')
+                        params.append(f'38;2;{cell.fg.r};{cell.fg.g};{cell.fg.b}')
                     if cell.bg:
-                        idx = _nearest_ansi256(cell.bg)
-                        parts.append(f'48;5;{idx}')
-                    line += ';'.join(parts) + 'm'
+                        params.append(f'48;2;{cell.bg.r};{cell.bg.g};{cell.bg.b}')
+                    line += '\033[' + ';'.join(params) + 'm'
                 last_fg = cell.fg
                 last_bg = cell.bg
             line += cell.char or ' '
@@ -120,7 +133,7 @@ def export_ansi(canvas: Canvas) -> str:
     return '\n'.join(lines) + '\n'
 
 
-def load_ansi_file(filepath: str) -> Optional[Canvas]:
+def load_ansi_file(filepath: str) -> Canvas | None:
     try:
         with open(filepath, 'rb') as f:
             raw = f.read()
@@ -151,12 +164,11 @@ def canvas_to_block_art(canvas: Canvas, fg_only: bool = False) -> str:
             t = canvas.get_pixel(x, y)
             b = canvas.get_pixel(x, y + 1) if y + 1 < canvas.h else None
             if t and t.fg and b and b.fg:
-                sb.append('\033[0;38;2;{};{};{};48;2;{};{};{}m\u2580'.format(
-                    t.fg.r, t.fg.g, t.fg.b, b.fg.r, b.fg.g, b.fg.b))
+                sb.append(f'\033[0;38;2;{t.fg.r};{t.fg.g};{t.fg.b};48;2;{b.fg.r};{b.fg.g};{b.fg.b}m\u2580')
             elif t and t.fg:
-                sb.append('\033[0;38;2;{};{};{}m\u2580'.format(t.fg.r, t.fg.g, t.fg.b))
+                sb.append(f'\033[0;38;2;{t.fg.r};{t.fg.g};{t.fg.b}m\u2580')
             elif b and b.fg:
-                sb.append('\033[0;38;2;{};{};{}m\u2584'.format(b.fg.r, b.fg.g, b.fg.b))
+                sb.append(f'\033[0;38;2;{b.fg.r};{b.fg.g};{b.fg.b}m\u2584')
             else:
                 sb.append(' ')
         sb.append('\033[0m\n')

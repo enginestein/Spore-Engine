@@ -184,7 +184,7 @@ def scene_raycaster(c, hr, t, pt, dt):
         for y in range(de+1, c.h):
             d_ = (y - c.h/2) / (c.h/2)
             c.set_pixel(x, y, '▒', floor_grad.at(min(1, d_)))
-        for y in range(0, ds):
+        for y in range(ds):
             d_ = (c.h/2 - y) / (c.h/2)
             c.set_pixel(x, y, '░', ceil_grad.at(min(1, d_)))
 

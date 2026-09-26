@@ -1,17 +1,22 @@
 from __future__ import annotations
 import math
-from typing import Optional
 from ..core.canvas import Canvas
+from ..core.glyphs import SHADE_CHARS
 from ..core.color import Color, Gradient
 
 
-SHADE = ' .:-=+*#%@'
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 
 def canvas_from_text(text: str) -> Canvas:
     lines = text.rstrip('\n').split('\n')
     h = len(lines)
     w = max(len(l) for l in lines) if lines else 0
+    if w < 1 or h < 1:
+        # Canvas rejects a zero dimension, and it cannot tell the caller
+        # whether the empty string or a zero-width line was the mistake.
+        raise ValueError('text must contain at least one visible character')
     c = Canvas(w, h)
     for y, line in enumerate(lines):
         for x, ch in enumerate(line):
@@ -53,7 +58,7 @@ class ImageConverter:
     def __init__(self, width: int, height: int):
         self.w = width
         self.h = height
-        self.pixels: list[list[Optional[Color]]] = [[None] * width for _ in range(height)]
+        self.pixels: list[list[Color | None]] = [[None] * width for _ in range(height)]
         self.chars: list[list[str]] = [[' '] * width for _ in range(height)]
 
     def from_rgb(self, data: list[list[tuple[int, int, int]]]):
@@ -92,21 +97,6 @@ class ImageConverter:
             for x in range(min(self.w, canvas.width - ox)):
                 if self.chars[y][x] != ' ' or self.pixels[y][x]:
                     canvas.set_pixel(x + ox, y + oy, self.chars[y][x], self.pixels[y][x])
-
-
-def make_checkerboard(w: int, h: int, size: int = 4,
-                      color1: Optional[Color] = None,
-                      color2: Optional[Color] = None) -> Canvas:
-    c = Canvas(w, h)
-    c1 = color1 or Color(60, 60, 60)
-    c2 = color2 or Color(40, 40, 40)
-    for y in range(h):
-        for x in range(w):
-            if ((x // size) + (y // size)) % 2:
-                canvas.set_pixel(x, y, '█', c2)
-            else:
-                canvas.set_pixel(x, y, '█', c1)
-    return c
 
 
 def gradient_canvas(w: int, h: int, grad: Gradient,

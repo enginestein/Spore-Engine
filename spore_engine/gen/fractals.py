@@ -1,9 +1,12 @@
 from __future__ import annotations
 import math
 import random
-from typing import Optional, List, Tuple
 from ..core.canvas import Canvas, HiResCanvas
-from ..core.color import Color, Gradient, WHITE, BLACK
+from ..core.color import Color, BLACK
+from ..core.glyphs import SHADE_CHARS
+
+#: Re-exported from core.glyphs so the ramp is defined once.
+SHADE = SHADE_CHARS
 
 class Mandelbrot:
     def __init__(self, width: int, height: int, max_iter: int = 100):
@@ -11,9 +14,8 @@ class Mandelbrot:
         self.h = height
         self.max_iter = max_iter
 
-    def render(self, canvas: Canvas | HiResCanvas, center: Tuple[float, float], zoom: float, t: float = 0):
+    def render(self, canvas: Canvas | HiResCanvas, center: tuple[float, float], zoom: float, t: float = 0):
         cx, cy = center
-        shade = ' .:-=+*#%@'
         for py in range(canvas.height):
             for px in range(canvas.width):
                 x0 = (px / canvas.width - 0.5) * zoom + cx
@@ -31,7 +33,8 @@ class Mandelbrot:
                 else:
                     n = it / self.max_iter
                     hue = (n * 2 + t * 0.02) % 1.0
-                    canvas.set_pixel(px, py, shade[int(n * 9)], Color.from_hsv(hue, 0.8, 0.5 + 0.5 * n))
+                    canvas.set_pixel(px, py, SHADE[int(n * (len(SHADE) - 1))],
+                                     Color.from_hsv(hue, 0.8, 0.5 + 0.5 * n))
 
 class BurningShip:
     def __init__(self, width: int, height: int, max_iter: int = 100):
@@ -39,35 +42,27 @@ class BurningShip:
         self.h = height
         self.max_iter = max_iter
 
-    def render(self, canvas: Canvas | HiResCanvas, center: Tuple[float, float], zoom: float, t: float = 0):
+    def render(self, canvas: Canvas | HiResCanvas, center: tuple[float, float], zoom: float, t: float = 0):
+        """Render the Burning Ship fractal.
+
+        z_next = (|Re z| + i|Im z|)^2 + c, which is why the real and imaginary
+        parts are both passed through ``abs`` each iteration. The absolute
+        values are what give the shape its characteristic downward "flames".
+
+        This previously contained two complete escape loops: a broken first one
+        that discarded its iteration count and then a correct one, so every
+        pixel paid for the work twice.
+        """
         cx, cy = center
-        shade = ' .:-=+*#%@'
         for py in range(canvas.height):
             for px in range(canvas.width):
                 x0 = (px / canvas.width - 0.5) * zoom + cx
                 y0 = (py / canvas.height - 0.5) * zoom + cy
-                x, y = 0.0, 0.0
-                it = 0
-                while x*x + y*y < 4 and it < self.max_iter:
-                    xt = x*x - y*y + x0
-                    # Burning ship: |x| and |y|
-                    y = abs(2*x*y) + y0
-                    x = abs(x*x - y*y + x0) # Actually it's (abs(x))^2 - (abs(y))^2 + x0
-                    # Standard Burning Ship:
-                    # z_next = (abs(Re(z)) + i*abs(Im(z)))^2 + c
-                    it += 1
-                
-                # Correct implementation:
-                # x_next = x*x - y*y + x0
-                # y_next = abs(2*x*y) + y0
-                # x, y = abs(x_next), y_next (wait, no)
-                
-                # Let's re-do standard Burning Ship:
                 zx, zy = 0.0, 0.0
                 it = 0
-                while zx*zx + zy*zy < 4 and it < self.max_iter:
-                    tmp = zx*zx - zy*zy + x0
-                    zy = abs(2*zx*zy) + y0
+                while zx * zx + zy * zy < 4 and it < self.max_iter:
+                    tmp = zx * zx - zy * zy + x0
+                    zy = abs(2 * zx * zy) + y0
                     zx = abs(tmp)
                     it += 1
 
@@ -79,10 +74,11 @@ class BurningShip:
                     r = int(255 * n)
                     g = int(100 * n * n)
                     b = int(50 * n * n * n)
-                    canvas.set_pixel(px, py, shade[int(n * 9)], Color(r, g, b))
+                    canvas.set_pixel(px, py, SHADE[int(n * (len(SHADE) - 1))],
+                                     Color(r, g, b))
 
 class NewtonFractal:
-    def __init__(self, width: int, height: int, roots: Optional[List[Tuple[float, float]]] = None):
+    def __init__(self, width: int, height: int, roots: list[tuple[float, float]] | None = None):
         self.w = width
         self.h = height
         self.roots = roots or [(1, 0), (-0.5, 0.866), (-0.5, -0.866)] # roots of z^3 - 1 = 0
@@ -148,7 +144,7 @@ class BarnsleyFern:
         self.points = [(0.0, 0.0)]
         self.x, self.y = 0.0, 0.0
 
-    def step(self, canvas: Canvas | HiResCanvas, n: int = 100, color: Optional[Color] = None):
+    def step(self, canvas: Canvas | HiResCanvas, n: int = 100, color: Color | None = None):
         col = color or Color(0, 255, 0)
         for _ in range(n):
             r = random.random()

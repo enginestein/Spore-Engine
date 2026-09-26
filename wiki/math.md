@@ -77,15 +77,68 @@ $$
 $$
 The resulting matrix transforms world-space coordinates to camera-relative coordinates.
 
+**The Perspective Divide, and when to keep $w$.**
+
+`Mat4.transform(v)` applies the matrix and divides through by $w$, returning a
+`Vec3`. That is right for a *screen position* and wrong for anything that needs
+the discarded value, because $w$ is not a constant across a primitive:
+
+$$
+\text{transform4}(v) = (x,\; y,\; z,\; w),\qquad
+\text{transform}(v) = \left(\tfrac{x}{w},\; \tfrac{y}{w},\; \tfrac{z}{w}\right)
+$$
+
+Two things need the undivided form:
+
+- **Ray generation.** Each pixel on the image plane is a *different* point, so
+  its ray direction is $\text{P}(\text{pixel}) - \text{eye}$. You cannot
+  transform one point and reuse it.
+- **Perspective-correct interpolation.** Depth must be interpolated as $z/w$
+  *and* $1/w$ separately across a triangle, then divided at the end. Interpolating
+  post-divide $z$ linearly — which is what the rasteriser in
+  `render3d/engine3d.py` is handed — is only correct when $w$ is constant
+  across the face, i.e. for orthographic or infinitely distant geometry.
+
+**`transform_vector(v)`** transforms a *direction* rather than a point: the
+translation column is skipped. Transforming a direction with `transform` would
+offset it by the object's position, which is never what a normal or a velocity
+wants.
+
+**`normal_matrix()`** is the inverse-transpose of the upper-left 3×3:
+$$
+N' = \left(M^{-1}\right)^{T} \cdot N
+$$
+This matters as soon as a model is scaled non-uniformly. Under a scale
+$S = \text{diag}(s_x, s_y, s_z)$ a normal $(n_x, n_y, n_z)$ must become
+$(n_x/s_x,\; n_y/s_y,\; n_z/s_z)$ — dividing, not multiplying — so that it
+stays perpendicular to the surface it came from. Using the model matrix directly
+tilts every normal and the lighting is subtly wrong in a way that looks like a
+lighting bug rather than a maths bug.
+
+**`orthographic(left, right, top, bottom, near, far)`** drops the divide
+entirely ($w = 1$), so scale is preserved and parallel lines stay parallel.
+
 ---
 
 ## 2. Color Mathematics — `spore_engine/core/color.py`
 
 ### Luminance
-$$
-L = 0.299R + 0.587G + 0.114B
-$$
-The coefficients approximate human photopic vision — green contributes most to perceived brightness, blue least. Used for converting color to grayscale and for shade character selection.
+The engine has **two** luminance weights, and they are not interchangeable:
+
+| | coefficients | used by |
+|---|---|---|
+| Rec.601 | $L = 0.299R + 0.587G + 0.114B$ | `Color.luminance` — grayscale conversion, shade-character selection, `palette_remap` |
+| Rec.709 | $L = 0.2126R + 0.7152G + 0.0722B$ | `Image.luma` — bloom thresholds, `posterized`, `palette` on a `Field` |
+
+Both approximate human photopic vision — green dominates, blue contributes least.
+Rec.709 weights green harder and is the current standard; Rec.601 is what SD-era
+video used. The difference is small but not zero: pure red measures 76.2 under
+Rec.601 and 54.2 under Rec.709, so a hard-coded bloom threshold selects a
+different set of pixels depending on which one you used.
+
+Within one subsystem they are consistent — pick by which function you are calling
+rather than mixing the formulas by hand. (Consolidating on one is an open
+question; see the note in `CHANGELOG.md`.)
 
 ### HSV → RGB Conversion
 The HSV cylinder is sliced into 6 sectors (each 60°). Within each sector, one of the RGB components is constant, one varies linearly, and one is the value:
@@ -104,6 +157,44 @@ $$
 \text{lerp}(a, b, t) = a + (b - a) \times t
 $$
 Component-wise on RGB channels. $t \in [0, 1]$. Used for color blending, gradients, and transitions.
+
+### Highlight Rolloff and Bloom — `spore_engine/fx/imgops.py`
+
+Grading happens in linear light, before quantisation. Three formulas cover most
+of it:
+
+**`tonemapped(knee)`** — an exponential rolloff above the knee, so a
+deliberately bright region approaches white smoothly instead of clipping to a
+flat block:
+$$
+C' = \begin{cases}
+C, & C \le k \\
+k + (255 - k)\left(1 - e^{-(C-k)/(255-k)}\right), & C > k
+\end{cases}
+$$
+Values at or below the knee are untouched, so a carefully built palette survives.
+Aurora Lagoon uses $k = 172$, just under its sky ramp's top stop.
+
+**`bloomed(threshold, radius, intensity)`** — two dilation radii, each squared,
+so the halo falls off fast instead of hazing the whole frame:
+$$
+\begin{aligned}
+B &= \text{clamp}\left(\tfrac{L - t}{255 - t},\; 0,\; 1\right) \\
+\text{halo} &= \left(\text{dilate}_1(B)\right)^{2} \cdot 0.62
+              + \left(\text{dilate}_r(B)\right)^{2} \cdot 0.30 \\
+C' &= C + \text{halo} \cdot \text{tint} \cdot 255 \cdot i
+\end{aligned}
+$$
+`Field.dilate` is a square max-dilation (separable, four `np.maximum` passes per
+iteration), which is why there is no scipy dependency.
+
+**`vignetted(intensity, power)`** — a normalised radial falloff:
+$$
+r = 0.72\sqrt{\left(\tfrac{x_v}{1}\right)^{2} + \left(\tfrac{y_v}{1}\right)^{2}},
+\qquad C' = C\left(1 - i\,\text{clamp}(r,0,1)^{p}\right)
+$$
+where $x_v, y_v$ are the coordinates recentred on the frame and scaled to
+$[-1, 1]$.
 
 ### ANSI 256-Color Approximation
 Quantizes each RGB channel to 6 levels (0, 51, 102, 153, 204, 255), then indexes a $6 \times 6 \times 6$ cube: $16 + r \times 36 + g \times 6 + b$. Grayscales (R = G = B) use a separate ramp: $232 + R / 10.2$.
@@ -177,6 +268,24 @@ Doubles vertical resolution by mapping two physical pixels (top/bottom) to a sin
 | empty | filled | `▄` | bottom | — |
 | filled | filled | `▀` | top | bottom |
 
+**`Cell.z` vs `Cell.depth`.** Two different orderings share one buffer:
+
+| | meaning | initial | used by |
+|---|---|---|---|
+| `z` | painter's-order layer | `0` | sprites, text, anything composited back-to-front |
+| `depth` | geometric distance from the camera | `+inf` | renderers with real perspective |
+
+`depth` is written through `set_pixel_depth(x, y, depth, ...)`, which replaces the
+cell only when the new depth is *nearer* — the same contract as `set_pixel`, with
+a different key. It is deliberately excluded from `Cell.__eq__`, so a change in
+depth alone does not mark a cell dirty for the incremental flush.
+
+Keeping them apart is what lets a graded rewrite land *above* a mesh
+(`z = 2` after a mesh's own `0..1` NDC depth) while a real perspective buffer
+still sorts by distance. `render_mesh_solid` still uses `z`, because it hands the
+rasteriser post-divide NDC depth per vertex and cannot recover the $w$ it would
+need — see the perspective-correct note above.
+
 ---
 
 ## 4. 3D Rendering Pipeline — `spore_engine/render3d/engine3d.py`
@@ -216,6 +325,38 @@ Lambert's cosine law: the perceived brightness varies with the cosine of the ang
 
 ### Painter's Algorithm
 Faces are sorted by depth (farthest first) and rendered back-to-front. Closer faces overwrite farther ones. Works for non-intersecting convex objects.
+
+### Light Direction Convention
+`Light3D.direction` is the direction light **travels**, not the direction to the
+light. So the default `(0, -1, 0)` is a sun shining *downwards*, and it lights
+up-facing surfaces:
+
+$$
+\hat{L}_{\text{toward}} = -\,\frac{\vec{d}}{\|\vec{d}\|}, \qquad
+\text{lambert} = \max(0,\; \hat{L}_{\text{toward}} \cdot N)
+$$
+
+`contribution()` returns $\hat{L}_{\text{toward}}$, which is the vector both the
+Lambert and Blinn-Phong terms want. A point light instead reports
+$\text{normalize}(\text{pos} - \text{at})$ — the direction from the shaded point
+back to the lamp — with optional quadratic falloff:
+$$
+\text{falloff} = \max\left(0,\; 1 - \left(\tfrac{d}{r}\right)^{2}\right)
+$$
+
+### Blinn-Phong Shading
+The `Material.shade` term, for each light that contributes:
+$$
+\begin{aligned}
+\text{diffuse} &= \text{colour} \cdot \min(1,\; \text{strength}) \\
+H &= \hat{L}_{\text{toward}} - \hat{V} \\
+\text{specular} &= \left(\max(0,\; \hat{H} \cdot N)\right)^{n} \cdot s
+\end{aligned}
+$$
+where $\hat{V}$ points from the surface towards the viewer, so $\hat{H}$ is the
+half-vector between the light and the eye. An unlit face falls back to the
+ambient floor $\text{colour} \cdot a$ rather than to black, which is what keeps a
+back face from punching a hole in a silhouette.
 
 ---
 

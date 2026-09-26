@@ -1,9 +1,8 @@
 from __future__ import annotations
 import random
 from collections import deque
-from typing import Optional
 from ..core.canvas import Canvas
-from ..core.color import Color, GREEN, BLUE, RED, YELLOW, WHITE, DIM
+from ..core.color import Color, GREEN, RED, YELLOW, DIM
 
 
 class Maze:
@@ -64,7 +63,7 @@ class Maze:
         self.generated = True
 
     def solve_bfs(self, start: tuple[int, int] = (1, 1),
-                  end: Optional[tuple[int, int]] = None):
+                  end: tuple[int, int] | None = None):
         if end is None:
             end = (self.w * 2 - 1, self.h * 2 - 1)
         q = deque([start])
@@ -90,7 +89,7 @@ class Maze:
         return path
 
     def solve_dfs(self, start: tuple[int, int] = (1, 1),
-                  end: Optional[tuple[int, int]] = None):
+                  end: tuple[int, int] | None = None):
         if end is None:
             end = (self.w * 2 - 1, self.h * 2 - 1)
         stack = [start]
@@ -120,8 +119,8 @@ class Maze:
         return path
 
     def render(self, canvas: Canvas, ox: int = 0, oy: int = 0,
-               wall_color: Optional[Color] = None,
-               path_color: Optional[Color] = None,
+               wall_color: Color | None = None,
+               path_color: Color | None = None,
                show_solution: bool = True):
         wc = wall_color or Color(100, 150, 255)
         pc = path_color or YELLOW

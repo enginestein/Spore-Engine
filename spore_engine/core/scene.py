@@ -1,22 +1,49 @@
+"""Scene composition: a low-res canvas, an optional HiRes surface, and
+stacked overlay layers, presented together in one incremental frame."""
+
 from __future__ import annotations
-from typing import Optional
+
+
 from .canvas import Canvas, HiResCanvas
+
+__all__ = ['Layer', 'Scene']
 
 
 class Layer:
-    """A low-res overlay canvas fixed to a Scene, drawn at a given depth."""
+    """A low-res overlay canvas fixed to a Scene, drawn at a given depth.
 
-    def __init__(self, scene: 'Scene', name: str, z: float):
-        self.scene = scene
-        self.name = name
-        self.z = z
-        self.canvas = Canvas(scene.w, scene.h)
-        self.visible = True
+    Attribute access falls through to the layer's own canvas, so
+    ``layer.draw_text(...)`` works without going through ``layer.canvas``.
+    """
+
+    def __init__(self, scene: Scene, name: str, z: float):
+        object.__setattr__(self, 'scene', scene)
+        object.__setattr__(self, 'name', name)
+        object.__setattr__(self, 'z', z)
+        object.__setattr__(self, 'canvas', Canvas(scene.w, scene.h))
+        object.__setattr__(self, 'visible', True)
 
     def __getattr__(self, key):
-        if key.startswith('_') or key in ('scene', 'name', 'z', 'canvas', 'visible'):
+        # __getattr__ only runs when normal lookup fails, so the attributes
+        # set in __init__ are always found directly and the explicit guard is
+        # only a backstop. The important case is 'canvas' itself: if it is
+        # missing (a __init__ that raised partway, or __new__ without __init__)
+        # then getattr(self.canvas, key) would recurse forever.
+        if key.startswith('_') or key in ('scene', 'name', 'z', 'canvas',
+                                          'visible'):
             raise AttributeError(key)
-        return getattr(self.canvas, key)
+        canvas = self.__dict__.get('canvas')
+        if canvas is None:
+            raise AttributeError(key)
+        return getattr(canvas, key)
+
+    def clear(self):
+        """Blank the layer's canvas."""
+        self.canvas.clear()
+
+    def resize(self, width: int, height: int):
+        """Resize the layer's canvas, preserving content."""
+        self.canvas.resize(width, height)
 
     def __repr__(self):
         return f'Layer({self.name!r}, z={self.z})'
@@ -30,6 +57,10 @@ class Scene:
         sc.fill_sky(Gradient(BLUE, DARK))               # bg on main canvas
         sc.layer('hud', z=90).draw_text(1, 1, 'SCORE')  # fixed overlay
         sc.present(sys.stdout)                           # compose + draw
+
+    Attribute access falls through to the main canvas, so ``sc.draw_circle(...)``
+    draws straight onto it. Pass ``hires=False`` to skip the HiRes surface;
+    :attr:`surface` is then ``None``.
     """
 
     def __init__(self, width: int, height: int, hires: bool = True):
@@ -38,20 +69,43 @@ class Scene:
         self.hires_enabled = hires
         self.canvas = Canvas(width, height)
         self.hr = HiResCanvas(width, height * 2) if hires else None
-        self._layers: list[Layer] = []
+        self._layers: list = []
 
     @property
     def main(self) -> Canvas:
+        """The low-resolution canvas (the compositing target)."""
         return self.canvas
 
     @property
-    def surface(self) -> HiResCanvas:
+    def surface(self):
+        """The HiRes surface, or ``None`` when the scene was built with
+        ``hires=False``."""
         return self.hr
 
     def __getattr__(self, key):
         if key.startswith('_'):
             raise AttributeError(key)
-        return getattr(self.canvas, key)
+        # Guard against infinite recursion: if 'canvas' is not in __dict__ the
+        # getattr below would call __getattr__ again with the same key.
+        canvas = self.__dict__.get('canvas')
+        if canvas is None:
+            raise AttributeError(key)
+        return getattr(canvas, key)
+
+    def resize(self, width: int, height: int):
+        """Resize the scene and every layer, preserving content.
+
+        The HiRes surface keeps its 2x vertical resolution, so it becomes
+        ``width x height * 2``. Call this from a ``ResizeEvent`` handler: the
+        engine detects terminal resizes but never resizes a surface on its own.
+        """
+        self.w = width
+        self.h = height
+        self.canvas.resize(width, height)
+        if self.hr is not None:
+            self.hr.resize(width, height * 2)
+        for lay in self._layers:
+            lay.canvas.resize(width, height)
 
     def layer(self, name: str = 'layer', z: float = 0) -> Layer:
         """Create (or fetch) an overlay layer canvas by name."""
